@@ -4,13 +4,19 @@ go 1.22.1
 
 require (
 	firebase.google.com/go/v4 v4.14.0
-	github.com/coldstar-507/flatgen v0.0.0-20240618183732-f4c1a4f07fc1
+	github.com/coldstar-507/flatgen v0.0.0-20240722151442-d6a80e1a5e55
 	github.com/coldstar-507/utils v0.0.0-20240628170819-894d2f147162
+	github.com/google/flatbuffers v24.3.25+incompatible
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	google.golang.org/api v0.170.0
 )
 
-replace github.com/coldstar-507/flatgen => /home/scott/dev/down4/go-custom-back/flatbufs/flatgen
+replace (
+	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
+	github.com/coldstar-507/utils => ../utils
+)
+
+// replace github.com/coldstar-507/flatgen => /home/scott/dev/down4/go-custom-back/flatbufs/flatgen
 
 require (
 	cloud.google.com/go v0.112.1 // indirect
@@ -29,13 +35,12 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
-	go.mongodb.org/mongo-driver v1.16.0 // indirect
+	go.mongodb.org/mongo-driver v1.16.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect

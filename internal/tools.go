@@ -1,14 +1,20 @@
 package tools
 
 import (
-	"bytes"
+	// "bytes"
+	// "encoding/binary"
+	// "bytes"
+	// "encoding/binary"
+	// "encoding/hex"
 	"math/rand"
-	"strconv"
-	"unsafe"
+
+	// "strconv"
+	// "unsafe"
 
 	"sync"
 
-	"github.com/coldstar-507/flatgen"
+	// "github.com/coldstar-507/flatgen"
+	// "github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/utils"
 )
 
@@ -16,6 +22,9 @@ var (
 	FourKbPool = NewBytePool(4096)
 	OneKbPool  = NewBytePool(1024)
 	MediumPool = NewBytePool(256)
+	RootPool   = NewBytePool(utils.RAW_ROOT_ID_LEN)
+	PushIdPool = NewBytePool(utils.RAW_PUSH_ID_LEN)
+	MsgIdPool  = NewBytePool(utils.RAW_MSG_ID_LEN)
 	SmallPool  = NewBytePool(128)
 	TinyPool   = NewBytePool(4)
 )
@@ -49,9 +58,9 @@ func (p *bytePool) Put(buf []byte) {
 // The prefix will be a root or a device
 // both are unique point of interests for sorting
 // thus very useful for sorting data in leveldb
-func ExtractIdPrefix(id []byte) []byte {
-	return ExtractNthIdPrefix(id, 1)
-}
+// func ExtractIdPrefix(id []byte) []byte {
+// 	return ExtractNthIdPrefix(id, 1)
+// }
 
 // {kind}-{timestamp}-{unik}-{place}
 // byte-int64-int32-int16
@@ -71,62 +80,65 @@ func makeTimeId(kind byte, place uint16) *timeId {
 	}
 }
 
-
-
 // peak go? // that's crazy
 // when n is big, extracts the biggest prefix, should not use n bigger than the
 // amount of prefix though cause func has no stop for that
 // n <= 0 also returns the first prefix
-func ExtractNthIdPrefix(id []byte, n int) []byte {
-	for ix := bytes.IndexByte(id, '-'); ix != -1; ix = bytes.IndexByte(id[ix+1:], '-') + ix + 1 {
-		if n--; n <= 0 {
-			return id[:ix]
-		}
-	}
-	return id
-}
+// func ExtractNthIdPrefix(id []byte, n int) []byte {
+// 	for ix := bytes.IndexByte(id, '-'); ix != -1; ix = bytes.IndexByte(id[ix+1:], '-') + ix + 1 {
+// 		if n--; n <= 0 {
+// 			return id[:ix]
+// 		}
+// 	}
+// 	return id
+// }
 
-// root-timestamp-unik-place-suffix
-func WriteMsgIdValue(tid *flatgen.MessageId, buf []byte) int {
-	var k int
-	writeHyphen := func() { buf[k] = '-'; k += 1 }
-	k += copy(buf, tid.Root())
-	writeHyphen()
-	k += copy(buf[k:], strconv.Itoa(int(tid.Timestamp())))
-	writeHyphen()
-	k += copy(buf[k:], tid.Unik())
-	writeHyphen()
-	k += copy(buf[k:], tid.Place())
-	writeHyphen()
-	k += copy(buf[k:], tid.Suffix())
-	return k
-}
+// func MsgIdValue(id *flatgen.MessageId, b []byte) {
+// 	buf := bytes.NewBuffer(b)
+// 	binary.Write(buf, binary.BigEndian, id.Timestamp())
+// }
 
-func FastBytesToString(b []byte) string {
-	return unsafe.String(unsafe.SliceData(b), len(b))
-}
+// // root-timestamp-unik-place-suffix
+// func WriteMsgIdValue(tid *flatgen.MessageId, buf []byte) int {
+// 	var k int
+// 	writeHyphen := func() { buf[k] = '-'; k += 1 }
+// 	k += copy(buf, tid.Root())
+// 	writeHyphen()
+// 	k += copy(buf[k:], strconv.Itoa(int(tid.Timestamp())))
+// 	writeHyphen()
+// 	k += copy(buf[k:], tid.Unik())
+// 	writeHyphen()
+// 	k += copy(buf[k:], tid.Place())
+// 	writeHyphen()
+// 	k += copy(buf[k:], tid.Suffix())
+// 	return k
+// }
 
-func FastStringToBytes(s string) []byte {
-	return unsafe.Slice(unsafe.StringData(s), len(s))
-}
+// func FastBytesToString(b []byte) string {
+// 	return unsafe.String(unsafe.SliceData(b), len(b))
+// }
+
+// func FastStringToBytes(s string) []byte {
+// 	return unsafe.Slice(unsafe.StringData(s), len(s))
+// }
 
 // prefix will be {userSecret-devId}
 // but we bundle it as one to avoid unecessary memory allocation
 // prefix-timestamp-unik-place-suffix
-func WritePushIdValue(pid *flatgen.PushId, buf []byte) int {
-	var k int
-	writeHyphen := func() { buf[k] = '-'; k += 1 }
-	k += copy(buf, pid.Prefix())
-	writeHyphen()
-	k += copy(buf[k:], strconv.Itoa(int(pid.Timestamp())))
-	writeHyphen()
-	k += copy(buf[k:], pid.Unik())
-	writeHyphen()
-	k += copy(buf[k:], pid.Place())
-	writeHyphen()
-	k += copy(buf[k:], pid.Suffix())
-	return k
-}
+// func WritePushIdValue(pid *flatgen.PushId, buf []byte) int {
+// 	var k int
+// 	writeHyphen := func() { buf[k] = '-'; k += 1 }
+// 	k += copy(buf, pid.Prefix())
+// 	writeHyphen()
+// 	k += copy(buf[k:], strconv.Itoa(int(pid.Timestamp())))
+// 	writeHyphen()
+// 	k += copy(buf[k:], pid.Unik())
+// 	writeHyphen()
+// 	k += copy(buf[k:], pid.Place())
+// 	writeHyphen()
+// 	k += copy(buf[k:], pid.Suffix())
+// 	return k
+// }
 
 // func MsgIdValue(mid *flatgen.MessageId, buf []byte) []byte {
 // 	bbuf := bytes.NewBuffer(buf[:0])

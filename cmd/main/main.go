@@ -6,14 +6,16 @@ import (
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/handlers"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/router/router_utils"
+	"github.com/coldstar-507/utils/http_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
 // this should be part of the ENV in production
 var (
-	ip    string            = "localhost"
-	place uint16            = 0x1000
-	st    utils.SERVER_TYPE = utils.CHAT_ROUTER
+	ip         string                     = "localhost"
+	place      router_utils.SERVER_NUMBER = "0x1000"
+	routerType router_utils.ROUTER_TYPE   = router_utils.CHAT_ROUTER
 )
 
 func main() {
@@ -39,20 +41,19 @@ func main() {
 	go handlers.ConnManager.Run()
 
 	log.Println("Starting local router")
-	utils.InitLocalRouter(ip, st, place)
-	go utils.LocalRouter.Run()
+	router_utils.InitLocalServer(ip, place, routerType)
+	go router_utils.LocalServer.Run()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", utils.HandlePing)
-	mux.HandleFunc("GET /route-scores", utils.HandleScoreRequest)
+	mux.HandleFunc("GET /ping", router_utils.HandlePing)
+	mux.HandleFunc("GET /route-scores", router_utils.HandleScoreRequest)
+	mux.HandleFunc("GET /local-router", router_utils.HandleServerStatus)
+	mux.HandleFunc("GET /full-router", router_utils.HandleRouterStatus)
 
 	// mux.HandleFunc("POST /dev-conn", handlers.HandleDevConn)
 	mux.HandleFunc("POST /push", handlers.HandlePush)
 
-	server := utils.ApplyMiddlewares(mux,
-		// utils.HttpLogging,
-		utils.StatusLogger,
-	)
+	server := http_utils.ApplyMiddlewares(mux, http_utils.StatusLogger)
 
 	addr := "0.0.0.0:8082"
 	log.Println("Starting http chat-server on", addr)

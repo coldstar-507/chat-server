@@ -147,7 +147,8 @@ func (m *Manager) Run() {
 				log.Println("MAN: adding the client to room")
 				room[*conn.client.iddev] = conn.client
 			} else if client.sess < conn.client.sess {
-				log.Printf("MAN: client.sess: %d, newClient.sess: %d\n")
+				log.Printf("MAN: client.sess: %d, newClient.sess: %d\n",
+					client.sess, conn.client.sess)
 				// replace
 				log.Println("MAN: older session already connected, replacing")
 				room[*conn.client.iddev] = conn.client

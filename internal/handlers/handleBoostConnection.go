@@ -2,8 +2,7 @@ package handlers
 
 import (
 	"encoding/binary"
-	"encoding/hex"
-	"io"
+	"errors"
 	"log"
 	"net"
 
@@ -14,14 +13,15 @@ import (
 
 func StartBoostServer() {
 	listener, err := net.Listen("tcp", ":11003")
-	utils.Panic(err, "startChatServer error on net.Listen")
+	utils.Panic(err, "StartBoostServer(): error on net.Listen")
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Println("error accepting connection:", err)
+			log.Println("StartBoostServer(): error accepting connection:", err)
 		} else {
-			log.Println("new boost connection:", conn.LocalAddr())
+			log.Println("StartBoostServer(): new boost connection:",
+				conn.LocalAddr())
 		}
 		go HandleBoostConn(conn)
 	}
@@ -29,80 +29,57 @@ func StartBoostServer() {
 
 func HandleBoostConn(conn net.Conn) {
 	defer conn.Close()
-	b := make([]byte, 2*1024)
-	_, err := conn.Read(b[:1])
-	if err != nil {
-		log.Println("HandleBoostConn: error reading first byte:", err)
-		return
+
+	var (
+		t           byte
+		msgLen      uint16
+		boostTagLen uint16
+		nBoosts     uint32
+	)
+
+	err0 := binary.Read(conn, binary.BigEndian, &t)
+	err1 := binary.Read(conn, binary.BigEndian, &msgLen)
+	msgBuf := make([]byte, msgLen)
+	err2 := binary.Read(conn, binary.BigEndian, msgBuf)
+	err3 := binary.Read(conn, binary.BigEndian, &boostTagLen)
+	err4 := binary.Read(conn, binary.BigEndian, &nBoosts)
+	if err := errors.Join(err0, err1, err2, err3, err4); err != nil {
+		log.Println("HandleBoostConn: error reading request:\n\t", err)
 	}
 
-	if b[0] != 0x88 {
-		log.Println("HandleBoostConn: error first by should be 0x88")
-		return
+	log.Printf(`HandleBoostConn:
+t           : %x
+msgLen      : %d
+boostTagLen : %d
+nBoosts     : %d
+`, t, msgLen, boostTagLen, nBoosts)
+
+	if t != 0x88 {
+		log.Printf("HandleBoostConn: wrong t byte:%x\n", t)
 	}
 
-	if _, err = conn.Read(b[:2]); err != nil {
-		log.Println("HandleBoostConn: error reading msglen bytes:", err)
-		return
-	}
-
-	msgLen := binary.BigEndian.Uint16(b[:2])
-	if int(msgLen) > cap(b) {
-		b = make([]byte, msgLen)
-	}
-
-	if _, err = conn.Read(b[:msgLen]); err != nil {
-		log.Println("HandleBoostConn: error reading msg bytes:", err)
-		return
-	}
-
-	msg := flatgen.GetRootAsMessageEvent(b[:msgLen], 0)
+	msg := flatgen.GetRootAsMessageEvent(msgBuf, 0)
 	cid := msg.ChatId(nil)
 	cid.MutateTimestamp(utils.MakeTimestamp())
-	// id.MutatePlace(Place)
 
 	boostMsgId := utils.MakeRawMsgId(cid)
-	// idb := tools.MsgIdPool.Get()
-	// idbcap := cap(idb)
-	// defer tools.MsgIdPool.Put(idb)
-	// idbuf := bytes.NewBuffer(idb[:0])
-	// utils.WriteMsgId(idbuf, id)
-	// if idbuf.Cap() != idbcap {
-	// 	panic("should not have an allocation here")
-	// }
 
-	// strId := utils.FastStringToBytes(utils.StrMsgId(id))
-	err = db.LV.Put(boostMsgId, b[:msgLen], nil)
-	if err != nil {
-		log.Println("HandleBoostConn: error writing boost message:", err)
+	if err := db.LV.Put(boostMsgId, msgBuf, nil); err != nil {
+		log.Println("HandleBoostConn: error writing boost message:\n\t", err)
 		return
 	}
 
-	var tagLen uint16
-	for {
-		if _, err = conn.Read(b[:2]); err != nil {
-			if err == io.EOF {
-				log.Println("HandleBoostConn: boosts all written closing conn")
-				return
-			} else {
-				log.Println("HandleBoostConn: connection error:",
-					err, "closing conn")
-				return
-			}
-		}
-		tagLen = binary.BigEndian.Uint16(b[:2])
-		if _, err = conn.Read(b[:tagLen]); err != nil {
-			log.Println("HandleBoostConn: connection error:", err, "closing conn")
-			return
-		}
+	for range nBoosts {
+		if _, err := conn.Read(msgBuf[:boostTagLen]); err != nil {
+			log.Println("HandleBoostConn: connection error:\n\t",
+				err, "\n\tclosing conn")
 
-		if err = db.LV.Put(b[:tagLen], boostMsgId, nil); err != nil {
+			return
+		} else if err := db.LV.Put(msgBuf[:boostTagLen], boostMsgId, nil); err != nil {
 			log.Println("HandleBoostConn: error writing tag:", err, "continuing")
 			continue
-		} else {
-			strTag := hex.EncodeToString(b[:tagLen])
-			strMsgId := hex.EncodeToString(boostMsgId)
-			log.Printf("HandleBoostConn: wrote %s : %s\n", strTag, strMsgId)
 		}
+		log.Printf("HandleBoostConn: wrote %x : %x\n", msgBuf[:boostTagLen], boostMsgId)
 	}
+	conn.Write([]byte{0x88})
 }

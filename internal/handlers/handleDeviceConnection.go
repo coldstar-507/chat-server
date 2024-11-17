@@ -118,7 +118,7 @@ func (cm *devConnManager) Run() {
 			} else {
 				log.Printf("DCM: no conn at iddev=%x\n", prefixIdArray)
 				log.Println("DCM: those are the conns:")
-				for k, _ := range cm.conns {
+				for k := range cm.conns {
 					log.Printf("\t%x\n", k)
 				}
 

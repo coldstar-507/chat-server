@@ -1,0 +1,9 @@
+# set up this file if not adequate and source it
+
+SERVER_FOLDER="$HOME/.chat-server"
+
+export DATA_PATH="$SERVER_FOLDER/data"
+
+mkdir -p $DATA_PATH
+
+echo "chat data path : $DATA_PATH"

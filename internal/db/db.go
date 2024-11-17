@@ -6,7 +6,7 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/utils"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/storage"
@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	store_path = "./data" // this is a directory
+	store_path string
 	LV         *leveldb.DB
 	err        error
 	Messager   *messaging.Client
@@ -31,6 +31,11 @@ func InitFirebaseMessager() {
 }
 
 func InitLevelDb() {
+	store_path = os.Getenv("DATA_PATH")
+	if len(store_path) == 0 {
+		panic("DATA_PATH is not properly configured in ENV")
+	}
+
 	store, err = storage.OpenFile(store_path, false)
 	utils.Fatal(err, "InitLevelDb error opening store")
 	LV, err = leveldb.Open(store, nil)

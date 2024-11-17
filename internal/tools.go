@@ -15,16 +15,17 @@ import (
 
 	// "github.com/coldstar-507/flatgen"
 	// "github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
 var (
 	FourKbPool = NewBytePool(4096)
 	OneKbPool  = NewBytePool(1024)
 	MediumPool = NewBytePool(256)
-	RootPool   = NewBytePool(utils.RAW_ROOT_ID_LEN)
-	PushIdPool = NewBytePool(utils.RAW_PUSH_ID_LEN)
-	MsgIdPool  = NewBytePool(utils.RAW_MSG_ID_LEN)
+	RootPool   = NewBytePool(id_utils.RAW_ROOT_ID_LEN)
+	PushIdPool = NewBytePool(id_utils.RAW_PUSH_ID_LEN)
+	MsgIdPool  = NewBytePool(id_utils.RAW_MSG_ID_LEN)
 	SmallPool  = NewBytePool(128)
 	TinyPool   = NewBytePool(4)
 )

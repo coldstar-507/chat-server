@@ -6,7 +6,7 @@ require (
 	firebase.google.com/go/v4 v4.15.0
 	github.com/coldstar-507/flatgen v0.0.0-20240830172816-703a5c6098f5
 	github.com/coldstar-507/router v0.0.0
-	github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
+	// github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
 	github.com/coldstar-507/utils/http_utils v0.0.0
 	github.com/coldstar-507/utils/id_utils v0.0.0
 	github.com/coldstar-507/utils/utils v0.0.0
@@ -23,6 +23,7 @@ replace (
 	github.com/coldstar-507/utils/utils => ../utils/utils
 )
 
+require github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
 
 require (
 	cel.dev/expr v0.18.0 // indirect

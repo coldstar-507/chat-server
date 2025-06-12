@@ -2,16 +2,20 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/binary"
+	// "encoding/binary"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils"
-	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
+	// "github.com/syndtr/goleveldb/leveldb/util"
 )
 
 func StartDeviceServer() {
@@ -29,35 +33,31 @@ func StartDeviceServer() {
 	}
 }
 
-type iddev = [utils.RAW_PUSH_ID_PREFIX_LEN]byte
-type pushId = [utils.RAW_PUSH_ID_LEN]byte
+// type iddev = [id_utils.RAW_PUSH_ID_PREFIX_LEN]byte
+// type pushId = [id_utils.RAW_PUSH_ID_LEN]byte
 
 var DevConnsManager = devConnManager{
 	add:    make(chan *iddevConn),
 	send:   make(chan *push),
-	conns:  make(map[iddev]*iddevConn),
+	conns:  make(map[id_utils.Iddev_]*iddevConn),
 	ticker: time.NewTicker(time.Second * 30),
 }
 
 func (cm *devConnManager) Run() {
 	var (
-		pushIdArray   = [utils.RAW_PUSH_ID_LEN]byte{}
-		prefixIdArray = [utils.RAW_PUSH_ID_PREFIX_LEN]byte{}
-		heartbeat     = []byte{0x99}
-		toRemove      = make([]*iddev, 0, 24)
-		pushIdBuffer  = bytes.NewBuffer(pushIdArray[:0])
-		prefixBuffer  = bytes.NewBuffer(prefixIdArray[:0])
-		pushReq       *flatgen.PushRequest
-		pushId        *flatgen.PushId
-		sendReq       *push
-		ts            int64
+		iddevArray = id_utils.Iddev_{}
+		iddevBuf   = bytes.NewBuffer(iddevArray[:0])
+		heartbeat  = byte(0x99)
+		toRemove   = make([]*id_utils.Iddev_, 0, 24)
+		pr         *flatgen.PushRequest
+		sendReq    *push
 	)
 
 	for {
 		select {
 		case <-cm.ticker.C:
 			for k, c := range cm.conns {
-				if _, err := c.conn.Write(heartbeat); err != nil {
+				if err := c.WriteBin(heartbeat); err != nil {
 					toRemove = append(toRemove, &k)
 				}
 			}
@@ -76,58 +76,66 @@ func (cm *devConnManager) Run() {
 			toRemove = toRemove[:0]
 
 		case conn := <-cm.add:
-			log.Printf("DCM: add request for conn=%x\n", *conn.dev)
-			if c := cm.conns[*conn.dev]; c != nil {
+			log.Printf("DCM: add request for conn=%x\n", *conn.iddev)
+			if c := cm.conns[*conn.iddev]; c != nil {
 				if conn.sess > c.sess {
 					log.Printf("DCM: conn=%x newer conn, replacing it\n",
-						*conn.dev)
+						*conn.iddev)
 					c.conn.Close()
-					delete(cm.conns, *c.dev)
-					cm.conns[*conn.dev] = conn
+					delete(cm.conns, *c.iddev)
+					cm.conns[*conn.iddev] = conn
+					ReadPushes(conn.conn,
+						(*conn.node)[:], conn.dev, conn.ref)
 				} else {
 					log.Printf("DCM: conn=%x isn't newer, destroying it\n",
-						*conn.dev)
+						*conn.iddev)
 					conn.conn.Close()
 				}
 			} else {
-				log.Printf("DCM: adding conn=%x\n", *conn.dev)
-				cm.conns[*conn.dev] = conn
+				log.Printf("DCM: adding conn=%x\n", *conn.iddev)
+				cm.conns[*conn.iddev] = conn
+				ReadPushes(conn.conn,
+					(*conn.node)[:], conn.dev, conn.ref)
 			}
 
 		case sendReq = <-cm.send:
-			ts = utils.MakeTimestamp()
-			pushReq = sendReq.pr
-			pushId = pushReq.PushId(nil)
-			pushId.MutateTimestamp(ts)
-			utils.WritePushId(pushIdBuffer, pushId)
-			sendReq.ech <- db.LV.Put(pushIdBuffer.Bytes(),
-				pushReq.PayloadBytes(), nil)
+			pr = sendReq.pr
+			stmt := `INSERT INTO db_one.pushes
+                                 (node_id, dev, ts, nonce, type, payload)
+                                 VALUES (?, ?, ?, ?, ?, ?)`
+			ts := utils.MakeTimestamp()
+			q := db.Scy.Query(stmt, pr.RawNodeIdBytes(), pr.Dev(), ts,
+				utils.MakeNonce(), pr.Type(), pr.PayloadBytes())
 
-			utils.WritePushIdPrefixId(prefixBuffer, pushId)
+			sendReq.ech <- q.Exec()
+			q.Release()
+			iddevBuf.Reset()
+			err := utils.WriteBin(iddevBuf,
+				id_utils.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
+			log.Printf("DCM: writing %x, %x, %x to iddevBuf\n",
+				id_utils.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
+			log.Printf("result: %x, %v\n", iddevArray, err)
+			// iddev := iddevBuf.Bytes()
+			// iddevBuf.Reset()
 
-			log.Printf("DCM: push request id=%x for iddev=%x\n",
-				pushIdBuffer, prefixBuffer)
-
-			if conn := cm.conns[prefixIdArray]; conn != nil {
-				log.Printf("DCM: writing to conn at iddev=%x\n", prefixIdArray)
-				_, err := conn.conn.Write(pushReq.PayloadBytes())
+			log.Printf("DCM: push request for iddev=%X\n", iddevArray)
+			if conn := cm.conns[iddevArray]; conn != nil {
+				err := conn.WriteBin(pr.Type(), ts,
+					uint16(len(pr.PayloadBytes())), pr.PayloadBytes())
+				log.Printf("DCM: writing to conn at iddev=%x\n", iddevArray)
 				if err != nil {
 					conn.conn.Close()
-					delete(cm.conns, *conn.dev)
+					delete(cm.conns, *conn.iddev)
 				}
 			} else {
-				log.Printf("DCM: no conn at iddev=%x\n", prefixIdArray)
+				log.Printf("DCM: no conn at iddev=%x\n", iddevArray)
 				log.Println("DCM: those are the conns:")
 				for k := range cm.conns {
 					log.Printf("\t%x\n", k)
 				}
-
 			}
 
-			pushIdBuffer.Reset()
-			prefixBuffer.Reset()
 		}
-
 	}
 }
 
@@ -137,17 +145,25 @@ type push struct {
 }
 
 type iddevConn struct {
-	dev  *iddev
-	conn net.Conn
-	sess int64
-	// close chan struct{}
+	iddev     *id_utils.Iddev_
+	conn      net.Conn
+	sess, ref int64
+	node      *id_utils.NodeId
+	dev       uint32
+	m         sync.Mutex
+}
+
+func (c *iddevConn) WriteBin(bin ...any) error {
+	c.m.Lock()
+	defer c.m.Unlock()
+	return utils.WriteBin(c.conn, bin...)
 }
 
 // these will be sse conns
 type devConnManager struct {
 	add   chan *iddevConn
 	send  chan *push
-	conns map[iddev]*iddevConn
+	conns map[id_utils.Iddev_]*iddevConn
 	// conns  map[string]*conn
 	ticker *time.Ticker
 }
@@ -155,16 +171,71 @@ type devConnManager struct {
 // passing conn by param doesn't feel safe but should be?
 // unless a new push triggers an error -> disconnect
 // while this is iterating, could possibly panic the whole program
-func readNew(ref []byte, w io.Writer) error {
-	prefix := utils.PushIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
-	for ok := it.Seek(ref); ok; ok = it.Next() {
-		if _, err := w.Write(it.Value()); err != nil {
+// func readNew(ref []byte, w io.Writer) error {
+// 	prefix := id_utils.PushIdPrefix(ref)
+// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
+// 	defer it.Release()
+// 	for ok := it.Seek(ref); ok; ok = it.Next() {
+// 		if _, err := w.Write(it.Value()); err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
+
+func ReadPushes(w io.Writer, nodeId []byte, dev uint32, ts int64) error {
+	stmt := `SELECT ts, type, payload FROM db_one.pushes
+                 WHERE node_id = ? AND dev = ? AND ts > ?`
+	q := db.Scy.Query(stmt, nodeId, dev, ts)
+	log.Println(q.String())
+	defer q.Release()
+	it := q.Iter()
+	var (
+		timestamp int64
+		t         byte
+		payload   []byte
+	)
+	for it.Scan(&timestamp, &t, &payload) {
+		err := utils.WriteBin(w, t, timestamp, uint16(len(payload)), payload)
+		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return it.Close()
+}
+
+func GetMsg(root []byte, ts int64, nonce uint32) ([]byte, error) {
+	stmt := `SELECT msg FROM db_one.messages
+                 WHERE root = ? AND ts = ? AND nonce = ?`
+	q := db.Scy.Query(stmt, root, ts, nonce)
+	defer q.Release()
+	var msg []byte
+	if err := q.Scan(&msg); err != nil {
+		return nil, err
+	} else {
+		return msg, nil
+	}
+}
+
+func HandleGetMsg(w http.ResponseWriter, r *http.Request) {
+	var (
+		_root = id_utils.Root{}
+		root  = _root[:]
+		ts    int64
+		nonce uint32
+		pad   byte
+		err   error
+	)
+
+	if err = utils.ReadBin(r.Body, &pad, root, &ts, &nonce); err != nil {
+		log.Println("HandleGetMsg: error reading request:", err)
+		w.WriteHeader(500)
+	} else if msg, err := GetMsg(root, ts, nonce); err != nil {
+		log.Println("HandleGetMsg: error finding msg:", err)
+		w.WriteHeader(501)
+	} else {
+		w.Write(msg)
+	}
 }
 
 func HandlePush(w http.ResponseWriter, r *http.Request) {
@@ -185,27 +256,41 @@ func HandlePush(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// conn comes in -> read new -> push -> connect
+// possible to miss a push between read new and connect
+// possible fix: read new from the connection manager
 func HandleDevConn(conn net.Conn) {
 	var (
-		pushId = pushId{}
-		iddev  = iddev{}
+		nodeId = id_utils.NodeId{}
+		dev    uint32
+		ts     int64
+		t      byte
+		iddev  = id_utils.Iddev_{}
 	)
-
-	if _, err := conn.Read(pushId[:]); err != nil {
-		log.Println("HandleDevConn2: error reading ref:", err)
+	if err := utils.ReadBin(conn, &t, nodeId[:], &dev, &ts); err != nil {
+		log.Println("HandleDevConn: error reading ref:", err)
 		conn.Close()
 		return
 	}
+	iddev[0] = t
+	copy(iddev[1:], nodeId[:])
+	binary.BigEndian.PutUint32(iddev[1+id_utils.RAW_NODE_ID_LEN:], dev)
+	// // copy(iddev[:], nodeId[:])
+	// // binary.BigEndian.PutUint32(iddev[id_utils.RAW_NODE_ID_LEN:], dev)
+	// if err := ReadPushes(conn, nodeId[:], dev, ts); err != nil {
+	// 	log.Println("HandleDevConn error reading new, canceling connection:", err)
+	// 	conn.Close()
+	// 	return
+	// }
 
-	copy(iddev[:], pushId[:utils.RAW_PUSH_ID_PREFIX_LEN])
-	if err := readNew(iddev[:], conn); err != nil {
-		log.Println("HandleDevConn2 error reading new, canceling connection:", err)
-		conn.Close()
-		return
+	DevConnsManager.add <- &iddevConn{
+		iddev: &iddev,
+		conn:  conn,
+		sess:  utils.MakeTimestamp(),
+		ref:   ts,
+		dev:   dev,
+		node:  &nodeId,
 	}
-
-	DevConnsManager.add <- &iddevConn{dev: &iddev, conn: conn, sess: utils.MakeTimestamp()}
-
 }
 
 // func HandleDevConn(w http.ResponseWriter, r *http.Request) {

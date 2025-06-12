@@ -2,227 +2,154 @@ package test
 
 import (
 	"bytes"
-	"encoding/hex"
-	"log"
+	"fmt"
+
+	// "encoding/hex"
+	// "log"
 	"os"
 	"testing"
 
+	// "github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/db"
+	"github.com/coldstar-507/chat-server/internal/handlers"
 	"github.com/coldstar-507/flatgen"
 	"github.com/coldstar-507/utils/id_utils"
 	"github.com/coldstar-507/utils/utils"
-	flatbuffers "github.com/google/flatbuffers/go"
-	"github.com/syndtr/goleveldb/leveldb/util"
+	// "github.com/syndtr/goleveldb/leveldb/util"
 )
 
+type bw struct {
+	buf *bytes.Buffer
+}
+
+func makeBw() *bw {
+	return &bw{buf: new(bytes.Buffer)}
+}
+
+func (b *bw) WriteBin(bin ...any) error {
+	return utils.WriteBin(b.buf, bin...)
+}
+
 func TestMain(m *testing.M) {
-	os.Chdir("../")
-	db.InitLevelDb()
-	defer db.ShutDownLevelDb()
+	db.InitScylla()
+	defer db.ShutdownScylla()
 	code := m.Run()
 	os.Exit(code)
 }
 
-func TestPrefixs(t *testing.T) {
-	zeroRoot := &flatgen.NodeIdT{
-		Timestamp: 0,
-		U32:       0,
-		Prefix:    id_utils.KIND_NODE,
-	}
+const (
+	root1 = "010500000191a66ff1498666d1ca05000001925000d51021e8c6c9000001925083c76d100001"
+	// root2 = "0105000001930eb6bf7643f657bb05000000000000000000000000000001930eb6c13f100001"
+)
 
-	singleRootT := flatgen.RootT{
-		Primary: &flatgen.NodeIdT{
-			Timestamp: utils.MakeTimestamp(),
-			U32:       id_utils.RandU32(),
-			Prefix:    id_utils.KIND_NODE,
-		},
-		Secondary: zeroRoot,
-	}
+var (
+	r1 = id_utils.RootFromString(root1)
+	// r2 = id_utils.RootFromString(root2)
 
-	dualRootT := flatgen.RootT{
-		Primary: &flatgen.NodeIdT{
-			Timestamp: utils.MakeTimestamp(),
-			U32:       id_utils.RandU32(),
-			Prefix:    id_utils.KIND_NODE,
-		},
-		Secondary: &flatgen.NodeIdT{
-			Timestamp: utils.MakeTimestamp(),
-			U32:       id_utils.RandU32(),
-			Prefix:    id_utils.KIND_NODE,
-		},
-	}
+	n1 = id_utils.NodeIdFromString("0500000191ab9012bb6a76a855")
+	// n2 = id_utils.NodeIdFromString("0500000191d7a640e00b756fcc")
+	// n3 = id_utils.NodeIdFromString("0500000191d7ca97d10f32d204")
+)
 
-	msgIdT0 := flatgen.MessageIdT{
-		Prefix:    id_utils.KIND_MESSAGE,
-		Root:      &singleRootT,
-		Timestamp: utils.MakeTimestamp(),
-		U32:       id_utils.RandU32(),
-		Suffix:    id_utils.Chat,
-	}
+func TestScrollChatAfter(t *testing.T) {
+	bw := makeBw()
+	rawRoot1 := id_utils.RawRoot(r1)
+	var testTs int64 = 1734639057785
+	handlers.HandleChatScrollSync(bw, false, rawRoot1, testTs, 0xffff, false)
 
-	msgIdT1 := flatgen.MessageIdT{
-		Prefix:    id_utils.KIND_MESSAGE,
-		Root:      &dualRootT,
-		Timestamp: utils.MakeTimestamp(),
-		U32:       id_utils.RandU32(),
-		Suffix:    id_utils.Chat,
-	}
+	var (
+		k byte
+		l uint16
+		v []byte
+	)
 
-	pushIdT := flatgen.PushIdT{
-		U32:       id_utils.RandU32(),
-		Timestamp: utils.MakeTimestamp(),
-		Device:    id_utils.RandU32(),
-		NodeId:    singleRootT.Primary,
-		Prefix:    id_utils.KIND_PUSH,
-	}
-
-	b1 := flatbuffers.NewBuilder(60)
-	b1.Finish(singleRootT.Pack(b1))
-	root0 := flatgen.GetRootAsRoot(b1.FinishedBytes(), 0)
-
-	b2 := flatbuffers.NewBuilder(60)
-	b2.Finish(dualRootT.Pack(b2))
-	root1 := flatgen.GetRootAsRoot(b2.FinishedBytes(), 0)
-
-	b3 := flatbuffers.NewBuilder(60)
-	b3.Finish(msgIdT0.Pack(b3))
-	msgId0 := flatgen.GetRootAsMessageId(b3.FinishedBytes(), 0)
-
-	b4 := flatbuffers.NewBuilder(60)
-	b4.Finish(msgIdT1.Pack(b4))
-	msgId1 := flatgen.GetRootAsMessageId(b4.FinishedBytes(), 0)
-
-	b5 := flatbuffers.NewBuilder(60)
-	b5.Finish(pushIdT.Pack(b5))
-	pushId := flatgen.GetRootAsPushId(b5.FinishedBytes(), 0)
-
-	rawRoot0 := id_utils.MakeRawRoot(root0)
-	if len(rawRoot0) != id_utils.RAW_ROOT_ID_LEN {
-		t.Errorf("len rawRoot0=%d\nexpected=%d\nvalue=%v\n",
-			len(rawRoot0), id_utils.RAW_ROOT_ID_LEN, rawRoot0)
-	}
-
-	rawRoot1 := id_utils.MakeRawRoot(root1)
-	if len(rawRoot1) != id_utils.RAW_ROOT_ID_LEN {
-		t.Errorf("len rawRoot1=%d\nexpected=%d\nvalue=%v\n",
-			len(rawRoot1), id_utils.RAW_ROOT_ID_LEN, rawRoot1)
-	}
-
-	rawMsgId0 := id_utils.MakeRawMsgId(msgId0)
-	if len(rawMsgId0) != id_utils.RAW_MSG_ID_LEN {
-		t.Errorf("len rawMsgId0=%d\nexpected=%d\nvalue=%v\n",
-			len(rawMsgId0), id_utils.RAW_MSG_ID_LEN, rawMsgId0)
-	}
-
-	rawMsgId1 := id_utils.MakeRawMsgId(msgId1)
-	if len(rawMsgId1) != id_utils.RAW_MSG_ID_LEN {
-		t.Errorf("len rawMsgId1=%d\nexpected=%d\nvalue=%v\n",
-			len(rawMsgId1), id_utils.RAW_MSG_ID_LEN, rawMsgId1)
-	}
-
-	rawPushId := id_utils.MakeRawPushId(pushId)
-	if len(rawPushId) != id_utils.RAW_PUSH_ID_LEN {
-		t.Errorf("len rawPushId=%d\nexpected=%d\nvalue=%v\n",
-			len(rawPushId), id_utils.RAW_PUSH_ID_LEN, rawPushId)
-	}
-
-	msgIdPrefix0 := append([]byte{0x00}, rawRoot0...)
-	if prefix := id_utils.MsgIdPrefix(rawMsgId0); !bytes.Equal(prefix, msgIdPrefix0) {
-		t.Errorf(`
-expected rawMsgId0 prefix len = %d
-got                           = %d
-expected value = %x
-got            = %x`, 1+id_utils.RAW_ROOT_ID_LEN, len(prefix), msgIdPrefix0, prefix)
-
-	}
-
-	msgIdPrefix1 := append([]byte{0x00}, rawRoot1...)
-	if prefix := id_utils.MsgIdPrefix(rawMsgId1); !bytes.Equal(prefix, msgIdPrefix1) {
-		t.Errorf(`
-expected rawMsgId1 prefix len = %d
-got                           = %d
-expected value = %x
-got            = %x`, 1+id_utils.RAW_ROOT_ID_LEN, len(prefix), msgIdPrefix1, prefix)
-	}
-
-	if prefix := id_utils.PushIdPrefix(rawPushId); !bytes.Equal(
-		prefix, rawPushId[:id_utils.RAW_PUSH_ID_PREFIX_LEN]) {
-		t.Errorf(`
-expected pushId prefix len = %d
-got                        = %d
-expected value = %x
-got            = %x`, id_utils.RAW_PUSH_ID_PREFIX_LEN, len(prefix),
-			rawPushId[:id_utils.RAW_NODE_ID_LEN+4], prefix)
-	}
-
-}
-
-func TestAfterId(t *testing.T) {
-	id := "00000190d7f3ab18cdcdcdcd0c00000190cc05595f10000500000190e00344b72a45879401"
-	ref, _ := hex.DecodeString(id)
-	prefix := id_utils.MsgIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
-
-	log.Println("AFTER")
-	log.Println(id)
-	log.Printf("prefix: %x\n", prefix)
-	log.Println("=====")
-
-	for ok := it.Seek(ref); ok; ok = it.Next() {
-		log.Printf("found key: %x\n", it.Key())
+	fmt.Printf("HandleChatScrollAfter %d:\n", testTs)
+	for {
+		if err := utils.ReadBin(bw.buf, &k, &l); err != nil {
+			break
+		}
+		if cap(v) < int(l) {
+			v = make([]byte, l)
+		} else {
+			v = v[:l]
+		}
+		utils.ReadBin(bw.buf, v)
+		fmt.Printf("k: %X\nl: %d\nv: %X\n", k, l, v)
+		switch k {
+		case handlers.CHAT_EVENT:
+			me := flatgen.GetRootAsMessageEvent(v, 0)
+			fmt.Printf("msgTs : %d\nmsgTxt: %s\n", me.Timestamp(), me.Txt())
+		case handlers.CHAT_SCROLL_DONE:
+			fmt.Printf("scroll done, raw payload: %X\n", v)
+		default:
+			t.Errorf("invalid chat server event type: %X\n", k)
+		}
 	}
 }
 
-func TestBeforeId(t *testing.T) {
-	id := "00000190d7f3ab18cdcdcdcd0c00000190cc05595f10000500000190e00344b72a45879401"
-	ref, _ := hex.DecodeString(id)
-	prefix := id_utils.MsgIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
+func TestScrollChatBefore(t *testing.T) {
+	bw := makeBw()
+	rawRoot1 := id_utils.RawRoot(r1)
+	var testTs int64 = 1734639057785
+	handlers.HandleChatScrollSync(bw, true, rawRoot1, testTs, 0xffff, false)
 
-	log.Println("BEFORE")
-	log.Println(id)
-	log.Printf("prefix: %x\n", prefix)
-	log.Println("======")
+	var (
+		k byte
+		l uint16
+		v []byte
+	)
 
-	it.Seek(ref)
-	for it.Prev() {
-		log.Printf("found key: %x\n", it.Key())
+	fmt.Printf("HandleChatScrollBefore %d:\n", testTs)
+	for {
+		if err := utils.ReadBin(bw.buf, &k, &l); err != nil {
+			break
+		}
+		if cap(v) < int(l) {
+			v = make([]byte, l)
+		} else {
+			v = v[:l]
+		}
+		utils.ReadBin(bw.buf, v)
+		fmt.Printf("k: %X\nl: %d\nv: %X\n", k, l, v)
+		switch k {
+		case handlers.CHAT_EVENT:
+			me := flatgen.GetRootAsMessageEvent(v, 0)
+			fmt.Printf("msgTs : %d\nmsgTxt: %s\n", me.Timestamp(), me.Txt())
+		case handlers.CHAT_SCROLL_DONE:
+			fmt.Printf("scroll done, raw payload: %X\n", v)
+		default:
+			t.Errorf("invalid chat server event type: %X\n", k)
+		}
 	}
 }
 
 func TestAfterDevice(t *testing.T) {
-	hexRef := "00000190d7f3ab18cdcdcdcd0cabababab00000190dbdb559d000000000b"
-	ref, _ := hex.DecodeString(hexRef)
-	prefix := id_utils.PushIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
+	buf := new(bytes.Buffer)
+	var d1 uint32 = 3380306940
+	rawN1 := id_utils.RawNodeId(n1)
+	var testTs int64 = 1734577797572
+	handlers.ReadPushes(buf, rawN1, d1, testTs)
 
-	log.Println("AFTER")
-	log.Println(hexRef)
-	log.Printf("prefix: %x\n", prefix)
-	log.Println("=====")
+	var (
+		k  byte
+		ts int64
+		l  uint16
+		p  []byte
+	)
 
-	for ok := it.Seek(ref); ok; ok = it.Next() {
-		log.Printf("found key: %x\n", it.Key())
-	}
-}
-
-func TestBeforeDevice(t *testing.T) {
-	hexRef := "00000190d7f3ab18cdcdcdcd0cabababab00000190dbdb559d000000000b"
-	ref, _ := hex.DecodeString(hexRef)
-	prefix := id_utils.PushIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
-
-	log.Println("BEFORE")
-	log.Println(hexRef)
-	log.Printf("prefix: %x\n", prefix)
-	log.Println("======")
-
-	it.Seek(ref)
-	for it.Prev() {
-		log.Printf("found key: %x\n", it.Key())
+	for {
+		if err := utils.ReadBin(buf, &k, &ts, &l); err != nil {
+			break
+		}
+		if cap(p) < int(l) {
+			p = make([]byte, l)
+		} else {
+			p = p[:l]
+		}
+		utils.ReadBin(buf, p)
+		fmt.Printf("k : %X\nts: %d\nl : %d\np : %X\n", k, ts, l, p)
+		if k == 0x01 {
+			fmt.Printf("text: %s\ntime: %d\n", string(p), ts)
+		}
 	}
 }

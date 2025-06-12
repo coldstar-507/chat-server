@@ -6,14 +6,14 @@ require (
 	firebase.google.com/go/v4 v4.15.0
 	github.com/coldstar-507/flatgen v0.0.0-20240830172816-703a5c6098f5
 	github.com/coldstar-507/router v0.0.0
-	// github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
 	github.com/coldstar-507/utils/http_utils v0.0.0
 	github.com/coldstar-507/utils/id_utils v0.0.0
 	github.com/coldstar-507/utils/utils v0.0.0
-	github.com/google/flatbuffers v24.3.25+incompatible
-	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
+	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	google.golang.org/api v0.205.0
 )
+
+replace github.com/gocql/gocql => github.com/scylladb/gocql v1.14.4
 
 replace (
 	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
@@ -23,7 +23,11 @@ replace (
 	github.com/coldstar-507/utils/utils => ../utils/utils
 )
 
-require github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
+require (
+	// github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
+	github.com/gocql/gocql v0.0.0-00010101000000-000000000000
+	go.mongodb.org/mongo-driver v1.17.1
+)
 
 require (
 	cel.dev/expr v0.18.0 // indirect
@@ -40,7 +44,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.49.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
@@ -57,8 +60,14 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
+	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
+	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	go.mongodb.org/mongo-driver v1.17.1 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.1.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.32.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.57.0 // indirect
@@ -82,5 +91,5 @@ require (
 	google.golang.org/grpc v1.68.0 // indirect
 	google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/inf.v0 v0.9.1 // indirect
 )

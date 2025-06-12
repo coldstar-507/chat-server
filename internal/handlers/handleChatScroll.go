@@ -1,296 +1,150 @@
 package handlers
 
 import (
-	"bytes"
-	"encoding/binary"
+	"fmt"
 	"log"
 
 	"github.com/coldstar-507/chat-server/internal/db"
-	"github.com/coldstar-507/utils"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/coldstar-507/utils/id_utils"
+	"github.com/coldstar-507/utils/utils"
 )
 
-// func handleChatScrollBeforeSync2(ref []byte, c *client2) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixFromRawMsg(ref)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	log.Printf("ref:\n%x\nroot prefix:\n%x\n", ref, prefix)
-// 	defer it.Release()
-// 	it.Seek(ref)
-// 	for limit > 0 && it.Prev() {
-// 		key := it.Key()
-// 		if key[len(key)-1] == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll before: %x\n", it.Key())
-// 		if _, err := c.conn.Write(it.Value()); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Prev()
-// 	c.rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(c.rbuf[1:3], 2)
-// 	if hasMore {
-// 		c.rbuf[3] = 0x01
-// 	} else {
-// 		c.rbuf[3] = 0x00
-// 	}
-// 	// before byte (true)
-// 	c.rbuf[4] = 0x01
-// 	log.Println("rbuf len:", len(c.rbuf[:5]))
-// 	c.conn.Write(c.rbuf[:5])
-// }
-
-// func handleChatScrollAfterSync2(ref []byte, c *client2) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixFromRawMsg(ref)
-// 	log.Printf("ref:\n%x\nroot prefix:\n%x\n", ref, prefix)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	defer it.Release()
-// 	for ok := it.Seek(ref); limit > 0 && ok; ok = it.Next() {
-// 		key := it.Key()
-// 		if key[len(key)-1] == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll after: %x\n", it.Key())
-// 		if _, err := c.conn.Write(it.Value()); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Next()
-// 	c.rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(c.rbuf[1:3], 2)
-// 	if hasMore {
-// 		c.rbuf[3] = 0x01
-// 	} else {
-// 		c.rbuf[3] = 0x00
-// 	}
-// 	// before byte (false)
-// 	c.rbuf[4] = 0x00
-// 	log.Println("rbuf len:", len(c.rbuf[:5]))
-// 	c.conn.Write(c.rbuf[:5])
-// }
-
-func handleChatScrollBeforeSync3(ref []byte, c *client, limit uint16) {
-	// var limit = 50
-	prefix := utils.MsgIdPrefix(ref)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	log.Printf("ref:\n%x\nroot prefix:\n%x\n", ref, prefix)
-	defer it.Release()
-	it.Seek(ref)
-	// Seek returns greater or equal to ref
-	// anyhow, we don't want it
-	for limit > 0 && it.Prev() {
-		key := it.Key()
-		if key[len(key)-1] == 0x00 {
-			limit--
-		}
-		log.Printf("yielding in scroll before: %x\n", it.Key())
-		if _, err := c.conn.Write(it.Value()); err != nil {
-			log.Println("Error writing chat-scroll to conn:", err)
-			break
-		}
+func If[T any](condition bool, If, Else T) T {
+	if condition {
+		return If
 	}
-
-	hasMore := limit == 0 && it.Prev()
-
-	payloadLen := 2 + utils.RAW_ROOT_ID_LEN
-	fullResLen := 1 + 2 + payloadLen
-
-	c.rbuf[0] = CHAT_SCROLL_DONE
-	binary.BigEndian.PutUint16(c.rbuf[1:3], uint16(payloadLen))
-	if hasMore {
-		c.rbuf[3] = 0x01
-	} else {
-		c.rbuf[3] = 0x00
-	}
-	// before byte (true)
-	c.rbuf[4] = 0x01
-	copy(c.rbuf[5:], prefix[1:]) // remove msgId prefix, so we only have root
-	log.Printf(`
-handleChatScrollBeforeSync3:
-c.rbuf[:fullResLen] = %X
-prefix              = %X
-prefix[1:]          = %X
-`, c.rbuf[:fullResLen], prefix, prefix[1:])
-	log.Printf("SCROLL END: WRITING\n%X\n", c.rbuf[:fullResLen])
-	c.conn.Write(c.rbuf[:fullResLen])
+	return Else
 }
 
-func handleChatScrollAfterSync3(ref []byte, c *client, limit uint16) {
-	prefix := utils.MsgIdPrefix(ref)
-	log.Printf("ref:\n%x\nroot prefix:\n%x\n", ref, prefix)
-	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-	defer it.Release()
-
-	handleIt := func(it iterator.Iterator) error {
-		key := it.Key()
-		// MsgEvent ids have suffix, 0x00 is a chat
-		if key[len(key)-1] == 0x00 {
-			limit--
-		}
-		log.Printf("yielding in scroll after: %x\n", it.Key())
-		if _, err := c.conn.Write(it.Value()); err != nil {
-			log.Println("Error writing chat-scroll to conn:", err)
-			return err
-		}
-		return nil
+func HandleBoostScroll2(c utils.Binw, nodeId []byte, ts int64, dev uint32) {
+	stmt0 := `UPDATE booster FROM db_one.boosts
+                  SET device = ?
+                  WHERE nodeId = ? AND ts > ?
+                  IF device == NULL`
+	q0 := db.Scy.Query(stmt0, nodeId, ts, dev)
+	fmt.Println(q0.String())
+	defer q0.Release()
+	if err := q0.Exec(); err != nil {
+		log.Println("HandleBoostScroll2: error marking boosters:", err)
+		return
 	}
 
-	// special case for after, because it can be ref but
-	// we don't want to handle ref, since it's been handled already
-	if ok := it.Seek(ref); ok && !bytes.Equal(ref, it.Key()) {
-		handleIt(it)
+	stmt1 := `SELECT booster FROM db_one.boosts
+                  WHERE node_id = ? AND ts > ? AND device = ?`
+	q1 := db.Scy.Query(stmt1, nodeId, ts, dev)
+	fmt.Println(q1.String())
+	defer q1.Release()
+	iter := q1.Iter()
+	defer iter.Close()
+
+	var booster []byte
+	for iter.Scan(&booster) {
+		c.WriteBin(BOOST_EVENT, uint16(len(booster)), booster)
 	}
-
-	for limit > 0 && it.Next() {
-		if err := handleIt(it); err != nil {
-			break
-		}
-	}
-
-	hasMore := limit == 0 && it.Next()
-
-	payloadLen := 2 + utils.RAW_ROOT_ID_LEN
-	fullResLen := 1 + 2 + payloadLen
-
-	c.rbuf[0] = CHAT_SCROLL_DONE
-	binary.BigEndian.PutUint16(c.rbuf[1:3], uint16(payloadLen))
-	if hasMore {
-		c.rbuf[3] = 0x01
-	} else {
-		c.rbuf[3] = 0x00
-	}
-	// before byte (true)
-	c.rbuf[4] = 0x00
-	copy(c.rbuf[5:], prefix[1:]) // remove msgId prefix, so we only have root
-	log.Printf(`
-handleChatScrollAfterSync3:
-c.rbuf[:fullResLen] = %X
-prefix              = %X
-prefix[1:]          = %X
-`, c.rbuf[:fullResLen], prefix, prefix[1:])
-	log.Printf("SCROLL END: WRITING\n%X\n", c.rbuf[:fullResLen])
-	c.conn.Write(c.rbuf[:fullResLen])
+	log.Println("handleBoostScroll2: done")
 }
 
-// func handleChatScrollBefore(ref, rbuf []byte, conn net.Conn) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixRaw(ref) // tools.ExtractIdPrefix(ref)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	log.Printf("scroll prefix: %x\n", prefix)
-// 	defer it.Release()
-// 	it.Seek(ref)
-// 	for limit > 0 && it.Prev() {
-// 		val := it.Value()
-// 		me := flatgen.GetRootAsMessageEvent(val, 3)
-// 		if me.Type() == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll before: %x\n", it.Key())
-// 		if _, err := conn.Write(val); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Prev()
-// 	rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(rbuf[1:3], 1)
-// 	if hasMore {
-// 		rbuf[3] = 0x01
-// 	} else {
-// 		rbuf[3] = 0x00
-// 	}
-// 	conn.Write(rbuf)
-// }
+func HandleBoostScroll(c utils.Binw, nodeId []byte, ts int64, limit uint16) {
+	stmt := `SELECT booster FROM db_one.boosts
+                 WHERE node_id = ? and ts > ? LIMIT ?`
+	q := db.Scy.Query(stmt, nodeId, ts, limit+1)
+	log.Println(q.String())
+	defer q.Release()
+	iter := q.Iter()
+	defer iter.Close()
 
-// func handleChatScrollAfter(ref, rbuf []byte, conn net.Conn) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixRaw(ref) // prefix := tools.ExtractIdPrefix(ref)
-// 	log.Printf("scroll prefix: %x\n", prefix)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	defer it.Release()
-// 	for ok := it.Seek(ref); limit > 0 && ok; ok = it.Next() {
-// 		val := it.Value()
-// 		me := flatgen.GetRootAsMessageEvent(val, 3)
-// 		if me.Type() == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll after: %x\n", it.Key())
-// 		if _, err := conn.Write(val); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Next()
-// 	rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(rbuf[1:3], 1)
-// 	if hasMore {
-// 		rbuf[3] = 0x01
-// 	} else {
-// 		rbuf[3] = 0x00
-// 	}
-// 	conn.Write(rbuf)
-// }
+	var booster []byte
+	for limit > 0 && iter.Scan(&booster) {
+		log.Printf("yielding boost: t=%d, l=%d\n", BOOST_EVENT, uint16(len(booster)))
+		err := c.WriteBin(BOOST_EVENT, uint16(len(booster)), booster)
+		if err != nil {
+			log.Println("ERROR writing BIN:", err)
+		}
+		limit--
+	}
+	isMore := iter.Scan(&booster)
+	c.WriteBin(c, BOOST_SCROLL_DONE, uint16(1), isMore)
+	log.Println("handleBoostScroll: done")
+}
 
-// func handleChatScrollBeforeSync(ref []byte, c *client2) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixRaw(ref) // tools.ExtractIdPrefix(ref)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	log.Printf("scroll prefix: %x\n", prefix)
-// 	defer it.Release()
-// 	it.Seek(ref)
-// 	for limit > 0 && it.Prev() {
-// 		val := it.Value()
-// 		me := flatgen.GetRootAsMessageEvent(val, 3)
-// 		if me.Type() == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll before: %x\n", it.Key())
-// 		if _, err := c.conn.Write(val); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Prev()
-// 	c.rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(c.rbuf[1:3], 1)
-// 	if hasMore {
-// 		c.rbuf[3] = 0x01
-// 	} else {
-// 		c.rbuf[3] = 0x00
-// 	}
-// 	c.conn.Write(c.rbuf)
-// }
+func HandleBoostScroll3(c utils.Binw, nodeId id_utils.NodeId, ts int64, limit uint16) {
+	stmt := `SELECT booster FROM db_one.boosts
+                 WHERE node_id = ? and ts > ? LIMIT ?`
+	q := db.Scy.Query(stmt, nodeId[:], ts, limit+1)
+	log.Println(q.String())
+	defer q.Release()
+	iter := q.Iter()
+	defer iter.Close()
 
-// func handleChatScrollAfterSync(ref []byte, c *client2) {
-// 	var limit = 50
-// 	prefix := utils.RootPrefixRaw(ref) // prefix := tools.ExtractIdPrefix(ref)
-// 	log.Printf("scroll prefix: %x\n", prefix)
-// 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
-// 	defer it.Release()
-// 	for ok := it.Seek(ref); limit > 0 && ok; ok = it.Next() {
-// 		val := it.Value()
-// 		me := flatgen.GetRootAsMessageEvent(val, 3)
-// 		if me.Type() == 0x00 {
-// 			limit--
-// 		}
-// 		log.Printf("yielding in scroll after: %x\n", it.Key())
-// 		if _, err := c.conn.Write(val); err != nil {
-// 			log.Println("Error writing chat-scroll to conn:", err)
-// 			break
-// 		}
-// 	}
-// 	hasMore := limit == 0 && it.Next()
-// 	c.rbuf[0] = CHAT_SCROLL_DONE
-// 	binary.BigEndian.PutUint16(c.rbuf[1:3], 1)
-// 	if hasMore {
-// 		c.rbuf[3] = 0x01
-// 	} else {
-// 		c.rbuf[3] = 0x00
-// 	}
-// 	c.conn.Write(c.rbuf)
-// }
+	var booster []byte
+	for limit > 0 && iter.Scan(&booster) {
+		log.Printf("yielding boost: t=%d, l=%d\n", BOOST_EVENT, uint16(len(booster)))
+		err := c.WriteBin(BOOST_EVENT, uint16(len(booster)), booster)
+		if err != nil {
+			log.Println("ERROR writing BIN:", err)
+		}
+		limit--
+	}
+	isMore := iter.Scan(&booster)
+	c.WriteBin(c, BOOST_SCROLL_DONE, uint16(1), isMore)
+	log.Println("handleBoostScroll: done")
+}
+
+func HandleChatScrollSync(c utils.Binw, before bool, root []byte, ts int64,
+	limit uint16, snips bool) {
+
+	stmt := fmt.Sprintf(
+		`SELECT msg FROM db_one.%s
+                 WHERE root = ? AND ts %s ?
+                 ORDER BY ts %s LIMIT ?`, If(snips, "snips", "messages"),
+		If(before, "<", ">"), If(before, "DESC", "ASC"))
+
+	q := db.Scy.Query(stmt, root, ts, limit+1) // fetch one more to check if hasMore
+	fmt.Println(q.String())
+	defer q.Release()
+	it := q.Iter()
+	var msg []byte
+	for limit > 0 && it.Scan(&msg) {
+		log.Println("found value")
+		c.WriteBin(CHAT_EVENT_FROM_SCROLL, uint16(len(msg)), msg)
+		log.Println("wrote value")
+		limit--
+	}
+
+	fmt.Print("Check if more")
+	hasMore := it.Scan(&msg)
+	fmt.Printf("hasmore? %v\n", hasMore)
+
+	fmt.Println("writing response")
+	c.WriteBin(CHAT_SCROLL_DONE, uint16(1+1+1+len(root)), hasMore, before, snips, root)
+	fmt.Println("done writing response")
+}
+
+func HandleChatScroll3(c utils.Binw, before bool, root id_utils.Root, ts int64,
+	limit uint16, snips bool) {
+
+	stmt := fmt.Sprintf(
+		`SELECT msg FROM db_one.%s
+                 WHERE root = ? AND ts %s ?
+                 ORDER BY ts %s LIMIT ?`, If(snips, "snips", "messages"),
+		If(before, "<", ">"), If(before, "DESC", "ASC"))
+
+	q := db.Scy.Query(stmt, root[:], ts, limit+1) // fetch one more to check if hasMore
+	defer q.Release()
+	it := q.Iter()
+	var msg []byte
+	for limit > 0 && it.Scan(&msg) {
+		log.Println("found value")
+		c.WriteBin(CHAT_EVENT_FROM_SCROLL, uint16(1+len(msg)), before, msg)
+		log.Println("wrote value")
+		limit--
+	}
+
+	fmt.Println("Check if more")
+	hasMore := it.Scan(&msg)
+	fmt.Printf("hasmore? %v\n", hasMore)
+
+	fmt.Println("writing response")
+	c.WriteBin(CHAT_SCROLL_DONE, uint16(1+1+1+len(root)), hasMore, before, snips, root[:])
+	fmt.Println("done writing response")
+}

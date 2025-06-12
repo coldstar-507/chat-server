@@ -1,20 +1,12 @@
 package main
 
-import (
-	"fmt"
-	"hash/fnv"
+var (
+	u32 uint32 = 0xFFFFFFFF
+	u64 uint64 = 0xFFFFFFFFFFFFFFFF
+
+	root = "010500000191a66ff1498666d1ca05000001925000d51021e8c6c9000001925083c76d100001"
 )
 
-func short(b []byte) []byte {
-	h := fnv.New32a()
-	h.Write(b)
-	return h.Sum(nil)
-}
-
 func main() {
-	b := &[6]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05}
-	fmt.Printf("%T\n", short(b[:]))
-	fmt.Printf("%X\n", short(b[:]))
-	fmt.Printf("%X\n", b[:])
 
 }

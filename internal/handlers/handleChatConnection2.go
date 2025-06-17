@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"io"
 	"net"
@@ -114,19 +115,20 @@ func initChatConnsManagers2() {
 	}
 }
 
-func idf(root _root) uint32 {
-	h := fnv.New32()
+func idf(root _root, h hash.Hash32) uint32 {
+	// h := fnv.New32()
+	h.Reset()
 	h.Write(root[:])
 	return h.Sum32() % n_man
 }
 
-func GetMan(root _root) *manager2 {
-	i := idf(root)
+func GetMan(root _root, h hash.Hash32) *manager2 {
+	i := idf(root, h)
 	return mans[i]
 }
 
-func GetChats(root _root) *schats {
-	i := idf(root)
+func GetChats(root _root, h hash.Hash32) *schats {
+	i := idf(root, h)
 	return mans[i].schats
 }
 func StartChatServer2() {
@@ -163,10 +165,11 @@ type manager2 struct {
 }
 
 type client2 struct {
-	rooms []_root
-	iddev iddev
-	conn  *utils.ClientConn
-	sess  int64
+	rooms  []_root
+	iddev  iddev
+	conn   *utils.ClientConn
+	sess   int64
+	hasher hash.Hash32
 }
 
 type msg2 struct {
@@ -180,7 +183,7 @@ type msg2 struct {
 // we send CHAT_EVENT | LEN | MSG to conns (msg has the mutated id)
 // we send MESSAGE_SAVE_ERROR | LEN | NEW_ID to sender if can't save
 func handleChatEvent(sender *client2, sw *msg2, conf bool) {
-	m := GetMan(sw.root)
+	m := GetMan(sw.root, sender.hasher)
 	fmt.Printf("man%d: handleing chat from client=%x in room=%x\n",
 		m.i, sender.iddev, sw.root)
 	m.syncer <- sw
@@ -237,17 +240,18 @@ func HandleChatConn2(conn net.Conn) {
 		return
 	}
 	c := &client2{
-		iddev: iddev,
-		conn:  utils.NewLockedConn(conn),
-		sess:  utils.MakeTimestamp(),
-		rooms: make([]_root, 0, 5),
+		iddev:  iddev,
+		conn:   utils.NewLockedConn(conn),
+		sess:   utils.MakeTimestamp(),
+		rooms:  make([]_root, 0, 5),
+		hasher: fnv.New32(),
 	}
 	c.readFromClientSync_2()
 }
 
 func connect(c *client2, root _root) {
 	fmt.Printf("connecting cl=%x to rt=%x\n", c.iddev, root)
-	man := GetChats(root)
+	man := GetChats(root, c.hasher)
 	success := man.ReadingAt(root, func(e *sconns) {
 		fmt.Printf("swapping cl=%x\n", c.iddev)
 		if v, swapped := e.Swap(c.iddev, c); swapped {
@@ -274,7 +278,7 @@ func connect(c *client2, root _root) {
 
 func disconnect(c *client2, root _root) {
 	var clearRoom bool
-	chats := GetChats(root)
+	chats := GetChats(root, c.hasher)
 	chats.ReadingAt(root, func(e *sconns) {
 		clearRoom = e.Delete(c.iddev) == 0
 	})
@@ -288,6 +292,9 @@ func disconnect(c *client2, root _root) {
 }
 
 func (c *client2) readFromClientSync_2() {
+	prefix := fmt.Sprintf("client=%x:", c.iddev)
+	f, ln := utils.Pf(prefix+" "), utils.Pln(prefix)
+
 	// stack values
 	var (
 		reqType  byte
@@ -306,39 +313,37 @@ func (c *client2) readFromClientSync_2() {
 		err      error
 	)
 
-	defer fmt.Printf("cl=%x: thread was closed\n", c.iddev[:])
+	defer ln("thread was closed")
 
 	go func() {
 		ticker := time.NewTicker(time.Second * 20)
-		defer fmt.Printf("killed heartbeater for %x, sess=%d\n", c.iddev, c.sess)
+		defer ln("killing heartbeater")
 		defer ticker.Stop()
 		var heartbeatErr error
 		for {
 			<-ticker.C
 			heartbeatErr = c.conn.WriteBin(byte(0x99))
 			if heartbeatErr != nil {
-				fmt.Printf("cl=%x, sess=%d heartbeat err: %v\n",
-					c.iddev, c.sess, heartbeatErr)
+				ln("heartbeat error:", heartbeatErr)
 				c.conn.C.Close()
 				return
 			}
-			fmt.Printf("cl=%x, sess=%d, heartbeat\n", c.iddev, c.sess)
+			ln("heartbeat")
 		}
 	}()
 
 	for {
-		fmt.Printf("cl=%x: reading from client\n", c.iddev)
-		fmt.Printf("cl=%x: conns:\n", c.iddev)
+		ln("reading from client")
+		ln("conns:")
 		for _, x := range c.rooms {
-			fmt.Printf("\t%x\n", x)
+			f("\t%x\n", x)
 		}
 
 		err = utils.ReadBin(c.conn.C, &reqType, &reqLen)
 		if err != nil {
-			fmt.Printf("cl=%x:, sess=%d, readBin error=%v, closing client\n",
-				c.iddev, c.sess, err)
-
-			m := utils.SplitMap(c.rooms, idf)
+			f("ReadBin error=%v, closing client\n", err)
+			splitter := func(r _root) uint32 { return idf(r, c.hasher) }
+			m := utils.SplitMap(c.rooms, splitter)
 			for i, roots := range m {
 				man := mans[i]
 				var md []_root
@@ -362,68 +367,65 @@ func (c *client2) readFromClientSync_2() {
 					})
 				}
 			}
-
 			close(res)
 			return
 		}
 
 		switch reqType {
 		case CHAT_CONN_REQ:
-			fmt.Printf("cl=%x: [BEGIN] chat conn request\n", c.iddev)
+			ln("[BEGIN] chat conn request")
 			if _, err = c.conn.C.Read(root[:]); err != nil {
-				fmt.Printf("cl=%x error reading rt: %v\n", c.iddev, err)
+				ln("error reading rt:", err)
 				continue
 			}
 			if utils.Contains(root, c.rooms) {
-				fmt.Printf("cl=%x: already connected to rt=%x\n", c.iddev, root)
+				f("already connected to rt=%x\n", root)
 				continue
 			}
 			connect(c, root)
-			fmt.Printf("cl=%x: [DONE] chat conn request\n", c.iddev)
+			ln("[DONE] chat conn request")
 
 		case CHAT_DISC_REQ:
-			fmt.Printf("cl=%x: [BEGIN] chat disc request\n", c.iddev)
+			ln("[BEGIN] chat disc request")
 			if _, err = c.conn.C.Read(root[:]); err != nil {
-				fmt.Printf("cl=%x error reading root: %v\n", c.iddev, err)
+				ln("error reading root:", err)
 				continue
 			}
 			if !utils.Contains(root, c.rooms) {
-				fmt.Printf("cl=%x: already disc to rt=%x\n", c.iddev, root)
+				f("already disc to rt=%x\n", root)
 				continue
 			}
 			disconnect(c, root)
-			fmt.Printf("cl=%x: [DONE] chat disc request\n", c.iddev)
+			f("[DONE] chat disc request")
 
 		case SCROLL_REQUEST:
-			fmt.Printf("cl=%x: [BEGIN] scroll request\n", c.iddev)
+			f("[BEGIN] scroll request")
 			err = utils.ReadBin(c.conn.C, &isBefore, root[:], &ts, &limit, &isSnips)
 			if err != nil {
-				fmt.Printf("cl=%x: error reading rest of request\n", c.iddev)
+				ln("error reading rest of request")
 				continue
 			}
-			fmt.Printf("cl=%x: before=%v, root=%x, ts=%d, limit=%d\n",
-				c.iddev, isBefore, root, ts, limit)
-
+			f("before=%v, root=%x, ts=%d, limit=%d\n", isBefore, root, ts, limit)
 			go HandleChatScroll3(c.conn, isBefore, root, ts, limit, isSnips)
 			fmt.Printf("cl=%x: [DONE] scroll request\n", c.iddev)
 
 		case BOOSTS_REQ:
-			fmt.Printf("cl=%x: [BEGIN] boost req\n", c.iddev)
+			ln("[BEGIN] boost req")
 			copy(nodeId[:], msgBuf[:])
 			// nodeId := msgBuf[:id_utils.RAW_NODE_ID_LEN]
 			err = utils.ReadBin(c.conn.C, nodeId[:], &ts, &limit)
 			if err != nil {
-				fmt.Printf("cl=%x: err reading request: %v\n", c.iddev, err)
+				ln("error reading request:", err)
 				continue
 			}
 			go HandleBoostScroll3(c.conn, nodeId, ts, limit)
-			fmt.Printf("cl=%x: [DONE] boost req\n", c.iddev)
+			ln("[DONE] boost req")
 
 		case CHAT_EVENT:
 			mbuf := msgBuf[:reqLen]
-			fmt.Printf("cl=%x: [BEGIN] chat event\n", c.iddev)
+			ln("[BEGIN] chat event")
 			if _, err = c.conn.C.Read(mbuf); err != nil {
-				fmt.Printf("cl=%x: error reading msg: %v\n", c.iddev, err)
+				ln("error reading msg:", err)
 				continue
 			}
 			cid := flatgen.GetRootAsMessageEvent(mbuf, 0).ChatId(nil)
@@ -439,7 +441,7 @@ func (c *client2) readFromClientSync_2() {
 			id_utils.WriteRoot(rootBuf, rt)
 			rootBuf.Reset()
 
-			fmt.Printf("cl=%x: rt=%X\n", c.iddev, root)
+			f("root=%x\n", root)
 			msgreq := &msg2{mbuf: mbuf, root: root, pre: pre, res: res}
 			handleChatEvent(c, msgreq, confirmed)
 
@@ -475,19 +477,18 @@ func (c *client2) readFromClientSync_2() {
 					handleChatEvent(c, msg, true)
 				}
 			}
-
-			fmt.Printf("cl=%x: [DONE] chat event\n", c.iddev)
+			ln("[DONE] chat event")
 
 		case NOTIFICATIONS:
 			ntfbuf := msgBuf[:reqLen]
 			if _, err := c.conn.C.Read(ntfbuf); err != nil {
-				fmt.Printf("cl=%x: error reading ntf: %v\n", c.iddev, err)
+				ln("error reading ntf:", err)
 				continue
 			}
-			fmt.Printf("cl=%x: [BEGIN] notification\n", c.iddev)
+			ln("[BEGIN] notification")
 			ntfs := flatgen.GetRootAsNotifications(ntfbuf, 0)
 			SendNotifications(ntfs)
-			fmt.Printf("cl=%x: [DONE] notification\n", c.iddev)
+			ln("[DONE] notification")
 		}
 	}
 }

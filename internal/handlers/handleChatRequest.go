@@ -8,7 +8,7 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 func SendNotifications(ntf *flatgen.Notifications) {
@@ -17,9 +17,9 @@ func SendNotifications(ntf *flatgen.Notifications) {
 		return
 	}
 	br, err := db.Messager.SendEach(context.Background(), msgs)
-	utils.NonFatal(err, "Error sending notifications")
+	utils2.NonFatal(err, "Error sending notifications")
 	for _, r := range br.Responses {
-		utils.NonFatal(r.Error, "Error sending a notification")
+		utils2.NonFatal(r.Error, "Error sending a notification")
 	}
 }
 

@@ -11,8 +11,7 @@ import (
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 var (
@@ -56,7 +55,7 @@ type BoostsManager struct {
 
 func StartBoostServer() {
 	listener, err := net.Listen("tcp", ":11003")
-	utils.Panic(err, "startBoostServer(): error on net.Listen")
+	utils2.Panic(err, "startBoostServer(): error on net.Listen")
 	defer listener.Close()
 	loadBoostManConf()
 	boost_mans = make([]*BoostsManager, n_boost_writer)
@@ -90,8 +89,8 @@ func (bm *BoostsManager) Run() {
                       VALUES (?, ?, ?, ?)`
 	for {
 		boostr := <-bm.boostCh
-		ts := utils.MakeTimestamp()
-		nonce := id_utils.RandU32()
+		ts := utils2.MakeTimestamp()
+		nonce := utils2.RandU32()
 		boost := boostr.boost
 		if mutated := boost.MutateTimestamp(ts); !mutated {
 			log.Println("WARNING: BoostManager: could not mutate timestamp")
@@ -112,7 +111,7 @@ func (bm *BoostsManager) Run() {
 // read: protocol-byte, u16(msgLen), msg, u32(nBoosts)
 // loop(nBoosts): read: u16(boosterLen), boosterBuf
 func HandleBoostConn(conn net.Conn) {
-	ln, f := utils.Lln("HandleBoostConn:"), utils.Lf("HandleBoostConn: ")
+	ln, f := utils2.Lln("HandleBoostConn:"), utils2.Lf("HandleBoostConn: ")
 
 	defer conn.Close()
 	res := make(chan struct{})
@@ -126,9 +125,9 @@ func HandleBoostConn(conn net.Conn) {
 		err                error
 	)
 
-	err0 := utils.ReadBin(conn, &t, &msgLen)
+	err0 := utils2.ReadBin(conn, &t, &msgLen)
 	msgBuf := make([]byte, msgLen)
-	err1 := utils.ReadBin(conn, msgBuf, &nBoosts)
+	err1 := utils2.ReadBin(conn, msgBuf, &nBoosts)
 	if err = errors.Join(err0, err1); err != nil {
 		ln("error reading request:", err)
 	}
@@ -142,12 +141,12 @@ func HandleBoostConn(conn net.Conn) {
 
 	msg := flatgen.GetRootAsMessageEvent(msgBuf, 0)
 	cid := msg.ChatId(nil)
-	boostMsgTimestamp := utils.MakeTimestamp()
-	msgNonce := id_utils.RandU32()
+	boostMsgTimestamp := utils2.MakeTimestamp()
+	msgNonce := utils2.RandU32()
 	cid.MutateTimestamp(boostMsgTimestamp)
 	cid.MutateU32(msgNonce)
 
-	root := id_utils.MakeRawRoot(cid.Root(nil))
+	root := utils2.MakeRawRoot(cid.Root(nil))
 	man := getBoostMan(root)
 
 	const msgStmt = `INSERT INTO db_one.messages (root, ts, nonce, msg)
@@ -162,9 +161,9 @@ func HandleBoostConn(conn net.Conn) {
 	}
 
 	for n := range nBoosts {
-		lerr := utils.ReadBin(conn, &boosterLen)
+		lerr := utils2.ReadBin(conn, &boosterLen)
 		if lerr != nil {
-			utils.WriteBin(conn, byte(0x89), n)
+			utils2.WriteBin(conn, byte(0x89), n)
 			ln("read boost len error:", err)
 			return
 		}
@@ -173,9 +172,9 @@ func HandleBoostConn(conn net.Conn) {
 			boosterBuf = make([]byte, boosterLen)
 		}
 
-		berr := utils.ReadBin(conn, boosterBuf[:boosterLen])
+		berr := utils2.ReadBin(conn, boosterBuf[:boosterLen])
 		if berr != nil {
-			utils.WriteBin(conn, byte(0x89), n)
+			utils2.WriteBin(conn, byte(0x89), n)
 			ln("read boosterBuf error:", err)
 			return
 		}

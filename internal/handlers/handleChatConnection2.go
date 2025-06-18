@@ -14,20 +14,19 @@ import (
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
-type iddev = id_utils.Iddev_
-type nodeid = id_utils.NodeId
-type _root = id_utils.Root
-type msgid = id_utils.MsgId
+type iddev = utils2.Iddev_
+type nodeid = utils2.NodeId
+type _root = utils2.Root
+type msgid = utils2.MsgId
 
 type conns = map[iddev]*client2
 type chats = map[_root]*sconns
 
-type sconns = utils.Smap[iddev, *client2]
-type schats = utils.Smap[_root, *sconns]
+type sconns = utils2.Smap[iddev, *client2]
+type schats = utils2.Smap[_root, *sconns]
 
 var n_man uint32
 var n_bc_sem uint32
@@ -50,20 +49,20 @@ func loadConfig() {
 
 	_nMan, err := strconv.Atoi(os.Getenv(nChatKey))
 	nMan := uint32(_nMan)
-	utils.Panic(err, "loadConfig: ENV: undefined %s", nChatKey)
-	utils.Assert(nMan > 0, "loadConfig: %s must be a positive u32: %d", nChatKey, nMan)
+	utils2.Panic(err, "loadConfig: ENV: undefined %s", nChatKey)
+	utils2.Assert(nMan > 0, "loadConfig: %s must be a positive u32: %d", nChatKey, nMan)
 	n_man = nMan
 
 	_nDbSem, err := strconv.Atoi(os.Getenv(nDbSemKey))
 	nDbSem := uint32(_nDbSem)
-	utils.Panic(err, "loadConfig: ENV: undefined %s", nDbSemKey)
-	utils.Assert(nDbSem > 0, "loadConf: %s must be a positive u32: %d", nDbSemKey, nDbSem)
+	utils2.Panic(err, "loadConfig: ENV: undefined %s", nDbSemKey)
+	utils2.Assert(nDbSem > 0, "loadConf: %s must be a positive u32: %d", nDbSemKey, nDbSem)
 	n_db_sem = nDbSem
 
 	_nBcSem, err := strconv.Atoi(os.Getenv(nBcSemKey))
 	nBcSem := uint32(_nBcSem)
-	utils.Panic(err, "loadConfig: ENV: undefined %s", nBcSemKey)
-	utils.Assert(nBcSem > 0, "loadConf: %s must be a positive u32: %d", nBcSemKey, nBcSem)
+	utils2.Panic(err, "loadConfig: ENV: undefined %s", nBcSemKey)
+	utils2.Assert(nBcSem > 0, "loadConf: %s must be a positive u32: %d", nBcSemKey, nBcSem)
 	n_bc_sem = nBcSem
 }
 
@@ -82,7 +81,7 @@ func printMans() {
 func (m *manager2) runSyncer() {
 	for req := range m.syncer {
 		cid := flatgen.GetRootAsMessageEvent(req.mbuf, 0).ChatId(nil)
-		cid.MutateTimestamp(utils.MakeTimestamp())
+		cid.MutateTimestamp(utils2.MakeTimestamp())
 		isChat := cid.Suffix() == byte(0x00)
 		if isChat {
 			cid.MutateSuffix(0x03)
@@ -133,7 +132,7 @@ func GetChats(root _root, h hash.Hash32) *schats {
 }
 func StartChatServer2() {
 	listener, err := net.Listen("tcp", ":11002")
-	utils.Panic(err, "StartChatServer error on net.Listen")
+	utils2.Panic(err, "StartChatServer error on net.Listen")
 	defer listener.Close()
 	loadConfig()
 	initChatConnsManagers2()
@@ -167,7 +166,7 @@ type manager2 struct {
 type client2 struct {
 	rooms  []_root
 	iddev  iddev
-	conn   *utils.ClientConn
+	conn   *utils2.ClientConn
 	sess   int64
 	hasher hash.Hash32
 }
@@ -220,9 +219,9 @@ func handleChatEvent(sender *client2, sw *msg2, conf bool) {
 			defer func() { <-m.bcsem }()
 			sentId := flatgen.GetRootAsMessageEvent(sw.mbuf, 0).ChatId(nil)
 			sender.conn.Locked(func(w io.Writer) {
-				l := uint16(2 * id_utils.RAW_MSG_ID_LEN)
-				utils.WriteBin(w, MESSAGE_SENT, l, sw.pre[:])
-				id_utils.WriteMsgId(w, sentId)
+				l := uint16(2 * utils2.RAW_MSG_ID_LEN)
+				utils2.WriteBin(w, MESSAGE_SENT, l, sw.pre[:])
+				utils2.WriteMsgId(w, sentId)
 			})
 		}()
 	}
@@ -241,8 +240,8 @@ func HandleChatConn2(conn net.Conn) {
 	}
 	c := &client2{
 		iddev:  iddev,
-		conn:   utils.NewLockedConn(conn),
-		sess:   utils.MakeTimestamp(),
+		conn:   utils2.NewLockedConn(conn),
+		sess:   utils2.MakeTimestamp(),
 		rooms:  make([]_root, 0, 5),
 		hasher: fnv.New32(),
 	}
@@ -272,7 +271,7 @@ func connect(c *client2, root _root) {
 			return sc
 		})
 	}
-	c.rooms, _ = utils.AddToSet(root, c.rooms)
+	c.rooms, _ = utils2.AddToSet(root, c.rooms)
 	c.conn.WriteBin(byte(0x16), uint16(len(root)), root[:])
 }
 
@@ -287,13 +286,13 @@ func disconnect(c *client2, root _root) {
 			return len(value.M) == 0
 		})
 	}
-	c.rooms, _ = utils.Remove(root, c.rooms)
+	c.rooms, _ = utils2.Remove(root, c.rooms)
 	c.conn.WriteBin(byte(0x17), uint16(len(root)), root[:])
 }
 
 func (c *client2) readFromClientSync_2() {
 	prefix := fmt.Sprintf("client=%x:", c.iddev)
-	f, ln := utils.Pf(prefix+" "), utils.Pln(prefix)
+	f, ln := utils2.Pf(prefix+" "), utils2.Pln(prefix)
 
 	// stack values
 	var (
@@ -339,11 +338,11 @@ func (c *client2) readFromClientSync_2() {
 			f("\t%x\n", x)
 		}
 
-		err = utils.ReadBin(c.conn.C, &reqType, &reqLen)
+		err = utils2.ReadBin(c.conn.C, &reqType, &reqLen)
 		if err != nil {
 			f("ReadBin error=%v, closing client\n", err)
 			splitter := func(r _root) uint32 { return idf(r, c.hasher) }
-			m := utils.SplitMap(c.rooms, splitter)
+			m := utils2.SplitMap(c.rooms, splitter)
 			for i, roots := range m {
 				man := mans[i]
 				var md []_root
@@ -378,7 +377,7 @@ func (c *client2) readFromClientSync_2() {
 				ln("error reading rt:", err)
 				continue
 			}
-			if utils.Contains(root, c.rooms) {
+			if utils2.Contains(root, c.rooms) {
 				f("already connected to rt=%x\n", root)
 				continue
 			}
@@ -391,7 +390,7 @@ func (c *client2) readFromClientSync_2() {
 				ln("error reading root:", err)
 				continue
 			}
-			if !utils.Contains(root, c.rooms) {
+			if !utils2.Contains(root, c.rooms) {
 				f("already disc to rt=%x\n", root)
 				continue
 			}
@@ -400,7 +399,7 @@ func (c *client2) readFromClientSync_2() {
 
 		case SCROLL_REQUEST:
 			f("[BEGIN] scroll request")
-			err = utils.ReadBin(c.conn.C, &isBefore, root[:], &ts, &limit, &isSnips)
+			err = utils2.ReadBin(c.conn.C, &isBefore, root[:], &ts, &limit, &isSnips)
 			if err != nil {
 				ln("error reading rest of request")
 				continue
@@ -412,8 +411,8 @@ func (c *client2) readFromClientSync_2() {
 		case BOOSTS_REQ:
 			ln("[BEGIN] boost req")
 			copy(nodeId[:], msgBuf[:])
-			// nodeId := msgBuf[:id_utils.RAW_NODE_ID_LEN]
-			err = utils.ReadBin(c.conn.C, nodeId[:], &ts, &limit)
+			// nodeId := msgBuf[:utils2.RAW_NODE_ID_LEN]
+			err = utils2.ReadBin(c.conn.C, nodeId[:], &ts, &limit)
 			if err != nil {
 				ln("error reading request:", err)
 				continue
@@ -429,7 +428,7 @@ func (c *client2) readFromClientSync_2() {
 				continue
 			}
 			cid := flatgen.GetRootAsMessageEvent(mbuf, 0).ChatId(nil)
-			id_utils.WriteMsgId(preBuf, cid)
+			utils2.WriteMsgId(preBuf, cid)
 			preBuf.Reset()
 
 			rt := cid.Root(nil)
@@ -438,7 +437,7 @@ func (c *client2) readFromClientSync_2() {
 				rt.MutateConfirmed(true)
 			}
 
-			id_utils.WriteRoot(rootBuf, rt)
+			utils2.WriteRoot(rootBuf, rt)
 			rootBuf.Reset()
 
 			f("root=%x\n", root)
@@ -450,24 +449,24 @@ func (c *client2) readFromClientSync_2() {
 				rootT, pushed, err := GetOrPushRoot(rt.UnPack())
 				if pushed {
 					connect(c, root)
-					l := uint16(2 * id_utils.RAW_MSG_ID_LEN)
+					l := uint16(2 * utils2.RAW_MSG_ID_LEN)
 					c.conn.Locked(func(w io.Writer) {
-						utils.WriteBin(w, MESSAGE_SENT, l, pre[:])
-						id_utils.WriteMsgId(w, cid)
+						utils2.WriteBin(w, MESSAGE_SENT, l, pre[:])
+						utils2.WriteMsgId(w, cid)
 					})
 				} else if err != nil {
-					l := uint16(id_utils.RAW_MSG_ID_LEN)
+					l := uint16(utils2.RAW_MSG_ID_LEN)
 					c.conn.WriteBin(ROOT_ERROR, l, pre[:])
 				} else if rootT.ChatPlace != rt.ChatPlace() {
-					l := uint16(id_utils.RAW_ROOT_ID_LEN +
-						id_utils.RAW_MSG_ID_LEN)
+					l := uint16(utils2.RAW_ROOT_ID_LEN +
+						utils2.RAW_MSG_ID_LEN)
 					c.conn.Locked(func(w io.Writer) {
-						utils.WriteBin(w, NEW_ROOT_PLACE, l)
-						id_utils.WriteRootT(w, rootT)
-						utils.WriteBin(w, pre[:])
+						utils2.WriteBin(w, NEW_ROOT_PLACE, l)
+						utils2.WriteRootT(w, rootT)
+						utils2.WriteBin(w, pre[:])
 					})
 				} else {
-					root_ := id_utils.RawRoot2(rootT)
+					root_ := utils2.RawRoot2(rootT)
 					msg := &msg2{mbuf: mbuf, root: root_, pre: pre, res: res}
 					rt := flatgen.GetRootAsMessageEvent(mbuf, 0).
 						ChatId(nil).Root(nil)

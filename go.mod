@@ -4,29 +4,30 @@ go 1.23.2
 
 require (
 	firebase.google.com/go/v4 v4.15.0
-	github.com/coldstar-507/flatgen v0.0.0-20240830172816-703a5c6098f5
-	github.com/coldstar-507/router v0.0.0
-	github.com/coldstar-507/utils/http_utils v0.0.0
-	github.com/coldstar-507/utils/id_utils v0.0.0
-	github.com/coldstar-507/utils/utils v0.0.0
-	github.com/google/flatbuffers v24.3.25+incompatible // indirect
+	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	google.golang.org/api v0.205.0
 )
 
 replace github.com/gocql/gocql => github.com/scylladb/gocql v1.14.4
 
-replace (
-	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
-	github.com/coldstar-507/router => ../router-server
-	github.com/coldstar-507/utils/http_utils => ../utils/http_utils
-	github.com/coldstar-507/utils/id_utils => ../utils/id_utils
-	github.com/coldstar-507/utils/utils => ../utils/utils
-)
+// replace (
+// 	github.com/coldstar-507/flatgen => ../../flatbufs/flatgen
+// 	github.com/coldstar-507/router => ../router-server
+// 	github.com/coldstar-507/utils/http_utils => ../utils/http_utils
+// 	github.com/coldstar-507/utils/id_utils => ../utils/id_utils
+// 	github.com/coldstar-507/utils/utils => ../utils/utils
+// )
 
 require (
 	// github.com/coldstar-507/utils v0.0.0-20241106185519-845eee7ad9d5
 	github.com/gocql/gocql v0.0.0-00010101000000-000000000000
-	go.mongodb.org/mongo-driver v1.17.1
+	go.mongodb.org/mongo-driver v1.17.4
+)
+
+require (
+	github.com/coldstar-507/flatgen v0.0.0-20250618172028-64c185e0a453
+	github.com/coldstar-507/router-server v0.0.0-20250618175342-c94a98346cbe
+	github.com/coldstar-507/utils2 v0.0.0-20250618173934-37902640cae7
 )
 
 require (
@@ -61,7 +62,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect

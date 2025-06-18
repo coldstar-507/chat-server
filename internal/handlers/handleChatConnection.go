@@ -16,8 +16,7 @@ import (
 	tools "github.com/coldstar-507/chat-server/internal"
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 const MAX_MSG_LEN int = 4096
@@ -25,7 +24,7 @@ const MAX_MSG_LEN int = 4096
 var ccms *chatConnsManagers
 
 var cm = &connMan{
-	conns: make(map[id_utils.Iddev_]*client),
+	conns: make(map[utils2.Iddev_]*client),
 	addCh: make(chan *client),
 	delCh: make(chan *client),
 }
@@ -49,7 +48,7 @@ func initChatConnsManagers(nMans uint32) {
 func createMan(i uint32) *Manager {
 	return &Manager{
 		i:          i,
-		conns:      make(map[id_utils.Root]map[id_utils.Iddev_]*client),
+		conns:      make(map[utils2.Root]map[utils2.Iddev_]*client),
 		delClient:  make(chan *client),
 		sw:         make(chan *msgReq),
 		connect:    make(chan *connRequest),
@@ -59,7 +58,7 @@ func createMan(i uint32) *Manager {
 	}
 }
 
-func (ncm *chatConnsManagers) GetMan(root *id_utils.Root) *Manager {
+func (ncm *chatConnsManagers) GetMan(root *utils2.Root) *Manager {
 	h := fnv.New32()
 	h.Write(root[:])
 	i := h.Sum32() % ncm.nMan
@@ -67,10 +66,10 @@ func (ncm *chatConnsManagers) GetMan(root *id_utils.Root) *Manager {
 }
 func StartChatServer() {
 	listener, err := net.Listen("tcp", ":11002")
-	utils.Panic(err, "StartChatServer error on net.Listen")
+	utils2.Panic(err, "StartChatServer error on net.Listen")
 	defer listener.Close()
 	n, err := strconv.Atoi(os.Getenv("N_CHAT_MANAGERS"))
-	utils.Panic(err, "StartChatServer: undefined N_CHAT_MANAGERS")
+	utils2.Panic(err, "StartChatServer: undefined N_CHAT_MANAGERS")
 	go cm.run()
 	initChatConnsManagers(uint32(n))
 
@@ -86,9 +85,9 @@ func StartChatServer() {
 }
 
 type client struct {
-	rooms []id_utils.Root
-	iddev *id_utils.Iddev_
-	conn  *utils.ClientConn
+	rooms []utils2.Root
+	iddev *utils2.Iddev_
+	conn  *utils2.ClientConn
 	sess  int64
 	res   chan error
 }
@@ -96,14 +95,14 @@ type client struct {
 type msgReq struct {
 	sender       *client
 	msg          []byte
-	root         *id_utils.Root
-	preSentMsgId *id_utils.MsgId
+	root         *utils2.Root
+	preSentMsgId *utils2.MsgId
 	res          chan struct{}
 }
 
 type connRequest struct {
 	client *client
-	root   *id_utils.Root
+	root   *utils2.Root
 	res    chan struct{}
 }
 
@@ -113,7 +112,7 @@ type rootRequest struct {
 }
 
 type connMan struct {
-	conns        map[id_utils.Iddev_]*client
+	conns        map[utils2.Iddev_]*client
 	addCh, delCh chan *client
 }
 
@@ -154,7 +153,7 @@ func (cm *connMan) run() {
 
 type Manager struct {
 	i          uint32
-	conns      map[id_utils.Root]map[id_utils.Iddev_]*client
+	conns      map[utils2.Root]map[utils2.Iddev_]*client
 	delClient  chan *client
 	sw         chan *msgReq
 	connect    chan *connRequest
@@ -223,7 +222,7 @@ func (m *Manager) Run() {
 				m.i, conn.client.iddev[:], conn.root[:])
 			if room := m.conns[*conn.root]; room == nil {
 				log.Printf("man%d: room doesn't exist, creating it\n", m.i)
-				room = map[id_utils.Iddev_]*client{
+				room = map[utils2.Iddev_]*client{
 					*conn.client.iddev: conn.client,
 				}
 				m.conns[*conn.root] = room
@@ -272,7 +271,7 @@ func handleNonChat_(m *Manager, sw *msgReq, isSnip bool) {
 	log.Printf("man%d: handleing non-chat from client=%x in room=%x\n",
 		m.i, sw.sender.iddev[:], sw.root[:])
 	cid := flatgen.GetRootAsMessageEvent(sw.msg, 0).ChatId(nil)
-	ts := utils.MakeTimestamp()
+	ts := utils2.MakeTimestamp()
 	cid.MutateTimestamp(ts)
 
 	if room := m.conns[*sw.root]; room != nil {
@@ -310,7 +309,7 @@ func handleChat_(m *Manager, sw *msgReq) {
 	cht := flatgen.GetRootAsMessageEvent(sw.msg, 0)
 	chatId := cht.ChatId(nil)
 
-	ts := utils.MakeTimestamp()
+	ts := utils2.MakeTimestamp()
 	chatId.MutateTimestamp(ts)
 	chatId.MutateSuffix(0x03)
 
@@ -338,9 +337,9 @@ func handleChat_(m *Manager, sw *msgReq) {
 	go func() {
 		defer m.wg.Done()
 		sw.sender.conn.Locked(func(w io.Writer) {
-			l := uint16(2 * id_utils.RAW_MSG_ID_LEN)
-			utils.WriteBin(w, MESSAGE_SENT, l, sw.preSentMsgId[:])
-			id_utils.WriteMsgId(w, chatId)
+			l := uint16(2 * utils2.RAW_MSG_ID_LEN)
+			utils2.WriteBin(w, MESSAGE_SENT, l, sw.preSentMsgId[:])
+			utils2.WriteMsgId(w, chatId)
 		})
 	}()
 
@@ -349,9 +348,9 @@ func handleChat_(m *Manager, sw *msgReq) {
 		ts, chatId.U32(), sw.msg).Exec(); err != nil {
 		log.Printf("man%d: handleChat_: error saving message %v:\n", m.i, err)
 		sw.sender.conn.Locked(func(w io.Writer) {
-			utils.WriteBin(w, MESSAGE_SAVE_ERROR,
-				uint16(id_utils.RAW_MSG_ID_LEN))
-			id_utils.WriteMsgId(w, chatId)
+			utils2.WriteBin(w, MESSAGE_SAVE_ERROR,
+				uint16(utils2.RAW_MSG_ID_LEN))
+			utils2.WriteMsgId(w, chatId)
 		})
 	}
 
@@ -359,7 +358,7 @@ func handleChat_(m *Manager, sw *msgReq) {
 }
 
 func HandleChatConn(conn net.Conn) {
-	iddev := id_utils.Iddev_{}
+	iddev := utils2.Iddev_{}
 	if _, err := io.ReadFull(conn, iddev[:]); err != nil {
 		log.Println("HandleChatConn: error reading iddev:", err)
 		conn.Close()
@@ -367,11 +366,11 @@ func HandleChatConn(conn net.Conn) {
 	}
 	c := &client{
 		iddev: &iddev,
-		conn:  utils.NewLockedConn(conn), // .ClientConn{C: conn, m: sync.Mutex{}},
-		sess:  utils.MakeTimestamp(),
+		conn:  utils2.NewLockedConn(conn), // .ClientConn{C: conn, m: sync.Mutex{}},
+		sess:  utils2.MakeTimestamp(),
 		// cbuf:  tools.FourKbPool.Get(),
 		// rbuf:  tools.OneKbPool.Get(),
-		rooms: make([]id_utils.Root, 0, 5),
+		rooms: make([]utils2.Root, 0, 5),
 		res:   make(chan error),
 	}
 	cm.addCh <- c
@@ -395,9 +394,9 @@ func (c *client) readFromClientSync_() {
 		isSnips         bool
 		ts              int64
 		msgBuf          = tools.FourKbPool.Get()
-		root            id_utils.Root
+		root            utils2.Root
 		rootBuf         = bytes.NewBuffer(root[:0])
-		preSentMsgId    id_utils.MsgId
+		preSentMsgId    utils2.MsgId
 		preSentMsgIdBuf = bytes.NewBuffer(preSentMsgId[:0])
 		err             error
 	)
@@ -434,7 +433,7 @@ func (c *client) readFromClientSync_() {
 		// this sequence could theoratically crash the server
 		// so manager should be responsible for freeing client resources
 
-		err = utils.ReadBin(c.conn.C, &reqType, &reqLen)
+		err = utils2.ReadBin(c.conn.C, &reqType, &reqLen)
 		if err != nil {
 			log.Printf("client=%x:, sess=%d, readBin error=%v, closing client\n",
 				*c.iddev, c.sess, err)
@@ -454,7 +453,7 @@ func (c *client) readFromClientSync_() {
 					c.iddev[:], err)
 				continue
 			}
-			if utils.Contains(root, c.rooms) {
+			if utils2.Contains(root, c.rooms) {
 				log.Printf("client=%x: already connected to root=%x\n",
 					c.iddev[:], root[:])
 				continue
@@ -465,7 +464,7 @@ func (c *client) readFromClientSync_() {
 			// ConnManager.connect <- &connRequest{client: c, root: &root}
 			<-res
 			close(res)
-			c.rooms, _ = utils.AddToSet(root, c.rooms)
+			c.rooms, _ = utils2.AddToSet(root, c.rooms)
 			c.conn.WriteBin(byte(0x16), uint16(len(root)), root[:])
 			log.Printf("client=%x: [DONE] chat conn request\n", c.iddev[:])
 
@@ -476,7 +475,7 @@ func (c *client) readFromClientSync_() {
 					c.iddev[:], err)
 				continue
 			}
-			if !utils.Contains(root, c.rooms) {
+			if !utils2.Contains(root, c.rooms) {
 				log.Printf("client=%x: already disc to root=%x\n",
 					c.iddev[:], root[:])
 				continue
@@ -487,13 +486,13 @@ func (c *client) readFromClientSync_() {
 			// ConnManager.disconnect <- &connRequest{client: c, root: &root}
 			<-res
 			close(res)
-			c.rooms, _ = utils.Remove(root, c.rooms)
+			c.rooms, _ = utils2.Remove(root, c.rooms)
 			c.conn.WriteBin(byte(0x17), uint16(len(root)), root[:])
 			log.Printf("client=%x: [DONE] chat disc request\n", c.iddev[:])
 
 		case SCROLL_REQUEST:
 			log.Printf("client=%x: [BEGIN] scroll request\n", c.iddev[:])
-			err = utils.ReadBin(c.conn.C, &isBefore, root[:], &ts,
+			err = utils2.ReadBin(c.conn.C, &isBefore, root[:], &ts,
 				&limit, &isSnips)
 			if err != nil {
 				log.Printf("client=%x: error reading rest of request\n",
@@ -509,8 +508,8 @@ func (c *client) readFromClientSync_() {
 
 		case BOOSTS_REQ:
 			log.Printf("client=%x: [BEGIN] boost req\n", c.iddev[:])
-			nodeId := msgBuf[:id_utils.RAW_NODE_ID_LEN]
-			err = utils.ReadBin(c.conn.C, nodeId, &ts, &limit)
+			nodeId := msgBuf[:utils2.RAW_NODE_ID_LEN]
+			err = utils2.ReadBin(c.conn.C, nodeId, &ts, &limit)
 			if err != nil {
 				log.Printf("client=%x: error reading request: %v\n",
 					c.iddev[:], err)
@@ -528,7 +527,7 @@ func (c *client) readFromClientSync_() {
 				continue
 			}
 			cid := flatgen.GetRootAsMessageEvent(mbuf, 0).ChatId(nil)
-			id_utils.WriteMsgId(preSentMsgIdBuf, cid)
+			utils2.WriteMsgId(preSentMsgIdBuf, cid)
 			preSentMsgIdBuf.Reset()
 			if rt := cid.Root(nil); !rt.Confirmed() {
 				newRoot, _, err := GetOrPushRoot(rt.UnPack())
@@ -541,12 +540,12 @@ func (c *client) readFromClientSync_() {
 					log.Printf("client=%x: newroot has otherplace\n",
 						c.iddev[:])
 					c.conn.Locked(func(w io.Writer) {
-						l := id_utils.RAW_ROOT_ID_LEN +
-							id_utils.RAW_MSG_ID_LEN
-						utils.WriteBin(w,
+						l := utils2.RAW_ROOT_ID_LEN +
+							utils2.RAW_MSG_ID_LEN
+						utils2.WriteBin(w,
 							NEW_ROOT_PLACE, uint16(l))
-						id_utils.WriteRootT(w, newRoot)
-						id_utils.WriteMsgId(w, cid)
+						utils2.WriteRootT(w, newRoot)
+						utils2.WriteMsgId(w, cid)
 					})
 					continue
 				}
@@ -554,7 +553,7 @@ func (c *client) readFromClientSync_() {
 				rt.MutateConfirmed(true)
 
 				// connect to that root
-				id_utils.WriteRoot(rootBuf, rt)
+				utils2.WriteRoot(rootBuf, rt)
 				res := make(chan struct{})
 				cr := &connRequest{res: res, client: c, root: &root}
 				ccms.GetMan(&root).connect <- cr
@@ -562,11 +561,11 @@ func (c *client) readFromClientSync_() {
 				// 	root: &root}
 				<-res
 				close(res)
-				c.rooms, _ = utils.AddToSet(root, c.rooms)
+				c.rooms, _ = utils2.AddToSet(root, c.rooms)
 				c.conn.WriteBin(byte(0x16), uint16(len(root)), root[:])
 
 			} else {
-				id_utils.WriteRoot(rootBuf, cid.Root(nil))
+				utils2.WriteRoot(rootBuf, cid.Root(nil))
 			}
 
 			rootBuf.Reset()

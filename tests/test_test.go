@@ -3,19 +3,13 @@ package test
 import (
 	"bytes"
 	"fmt"
-
-	// "encoding/hex"
-	// "log"
 	"os"
 	"testing"
 
-	// "github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/handlers"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
-	// "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/coldstar-507/utils2"
 )
 
 type bw struct {
@@ -27,7 +21,7 @@ func makeBw() *bw {
 }
 
 func (b *bw) WriteBin(bin ...any) error {
-	return utils.WriteBin(b.buf, bin...)
+	return utils2.WriteBin(b.buf, bin...)
 }
 
 func TestMain(m *testing.M) {
@@ -43,17 +37,17 @@ const (
 )
 
 var (
-	r1 = id_utils.RootFromString(root1)
-	// r2 = id_utils.RootFromString(root2)
+	r1 = utils2.RootFromString(root1)
+	// r2 = utils2.RootFromString(root2)
 
-	n1 = id_utils.NodeIdFromString("0500000191ab9012bb6a76a855")
-	// n2 = id_utils.NodeIdFromString("0500000191d7a640e00b756fcc")
-	// n3 = id_utils.NodeIdFromString("0500000191d7ca97d10f32d204")
+	n1 = utils2.NodeIdFromString("0500000191ab9012bb6a76a855")
+	// n2 = utils2.NodeIdFromString("0500000191d7a640e00b756fcc")
+	// n3 = utils2.NodeIdFromString("0500000191d7ca97d10f32d204")
 )
 
 func TestScrollChatAfter(t *testing.T) {
 	bw := makeBw()
-	rawRoot1 := id_utils.RawRoot(r1)
+	rawRoot1 := utils2.RawRoot(r1)
 	var testTs int64 = 1734639057785
 	handlers.HandleChatScrollSync(bw, false, rawRoot1, testTs, 0xffff, false)
 
@@ -65,7 +59,7 @@ func TestScrollChatAfter(t *testing.T) {
 
 	fmt.Printf("HandleChatScrollAfter %d:\n", testTs)
 	for {
-		if err := utils.ReadBin(bw.buf, &k, &l); err != nil {
+		if err := utils2.ReadBin(bw.buf, &k, &l); err != nil {
 			break
 		}
 		if cap(v) < int(l) {
@@ -73,7 +67,7 @@ func TestScrollChatAfter(t *testing.T) {
 		} else {
 			v = v[:l]
 		}
-		utils.ReadBin(bw.buf, v)
+		utils2.ReadBin(bw.buf, v)
 		fmt.Printf("k: %X\nl: %d\nv: %X\n", k, l, v)
 		switch k {
 		case handlers.CHAT_EVENT:
@@ -89,7 +83,7 @@ func TestScrollChatAfter(t *testing.T) {
 
 func TestScrollChatBefore(t *testing.T) {
 	bw := makeBw()
-	rawRoot1 := id_utils.RawRoot(r1)
+	rawRoot1 := utils2.RawRoot(r1)
 	var testTs int64 = 1734639057785
 	handlers.HandleChatScrollSync(bw, true, rawRoot1, testTs, 0xffff, false)
 
@@ -101,7 +95,7 @@ func TestScrollChatBefore(t *testing.T) {
 
 	fmt.Printf("HandleChatScrollBefore %d:\n", testTs)
 	for {
-		if err := utils.ReadBin(bw.buf, &k, &l); err != nil {
+		if err := utils2.ReadBin(bw.buf, &k, &l); err != nil {
 			break
 		}
 		if cap(v) < int(l) {
@@ -109,7 +103,7 @@ func TestScrollChatBefore(t *testing.T) {
 		} else {
 			v = v[:l]
 		}
-		utils.ReadBin(bw.buf, v)
+		utils2.ReadBin(bw.buf, v)
 		fmt.Printf("k: %X\nl: %d\nv: %X\n", k, l, v)
 		switch k {
 		case handlers.CHAT_EVENT:
@@ -126,7 +120,7 @@ func TestScrollChatBefore(t *testing.T) {
 func TestAfterDevice(t *testing.T) {
 	buf := new(bytes.Buffer)
 	var d1 uint32 = 3380306940
-	rawN1 := id_utils.RawNodeId(n1)
+	rawN1 := utils2.RawNodeId(n1)
 	var testTs int64 = 1734577797572
 	handlers.ReadPushes(buf, rawN1, d1, testTs)
 
@@ -138,7 +132,7 @@ func TestAfterDevice(t *testing.T) {
 	)
 
 	for {
-		if err := utils.ReadBin(buf, &k, &ts, &l); err != nil {
+		if err := utils2.ReadBin(buf, &k, &ts, &l); err != nil {
 			break
 		}
 		if cap(p) < int(l) {
@@ -146,7 +140,7 @@ func TestAfterDevice(t *testing.T) {
 		} else {
 			p = p[:l]
 		}
-		utils.ReadBin(buf, p)
+		utils2.ReadBin(buf, p)
 		fmt.Printf("k : %X\nts: %d\nl : %d\np : %X\n", k, ts, l, p)
 		if k == 0x01 {
 			fmt.Printf("text: %s\ntime: %d\n", string(p), ts)

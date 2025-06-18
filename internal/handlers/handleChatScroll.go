@@ -5,8 +5,7 @@ import (
 	"log"
 
 	"github.com/coldstar-507/chat-server/internal/db"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 func If[T any](condition bool, If, Else T) T {
@@ -16,7 +15,7 @@ func If[T any](condition bool, If, Else T) T {
 	return Else
 }
 
-func HandleBoostScroll2(c utils.Binw, nodeId []byte, ts int64, dev uint32) {
+func HandleBoostScroll2(c utils2.Binw, nodeId []byte, ts int64, dev uint32) {
 	stmt0 := `UPDATE booster FROM db_one.boosts
                   SET device = ?
                   WHERE nodeId = ? AND ts > ?
@@ -44,7 +43,7 @@ func HandleBoostScroll2(c utils.Binw, nodeId []byte, ts int64, dev uint32) {
 	log.Println("handleBoostScroll2: done")
 }
 
-func HandleBoostScroll(c utils.Binw, nodeId []byte, ts int64, limit uint16) {
+func HandleBoostScroll(c utils2.Binw, nodeId []byte, ts int64, limit uint16) {
 	stmt := `SELECT booster FROM db_one.boosts
                  WHERE node_id = ? and ts > ? LIMIT ?`
 	q := db.Scy.Query(stmt, nodeId, ts, limit+1)
@@ -67,7 +66,7 @@ func HandleBoostScroll(c utils.Binw, nodeId []byte, ts int64, limit uint16) {
 	log.Println("handleBoostScroll: done")
 }
 
-func HandleBoostScroll3(c utils.Binw, nodeId id_utils.NodeId, ts int64, limit uint16) {
+func HandleBoostScroll3(c utils2.Binw, nodeId utils2.NodeId, ts int64, limit uint16) {
 	stmt := `SELECT booster FROM db_one.boosts
                  WHERE node_id = ? and ts > ? LIMIT ?`
 	q := db.Scy.Query(stmt, nodeId[:], ts, limit+1)
@@ -90,7 +89,7 @@ func HandleBoostScroll3(c utils.Binw, nodeId id_utils.NodeId, ts int64, limit ui
 	log.Println("handleBoostScroll: done")
 }
 
-func HandleChatScrollSync(c utils.Binw, before bool, root []byte, ts int64,
+func HandleChatScrollSync(c utils2.Binw, before bool, root []byte, ts int64,
 	limit uint16, snips bool) {
 
 	stmt := fmt.Sprintf(
@@ -120,7 +119,7 @@ func HandleChatScrollSync(c utils.Binw, before bool, root []byte, ts int64,
 	fmt.Println("done writing response")
 }
 
-func HandleChatScroll3(c utils.Binw, before bool, root id_utils.Root, ts int64,
+func HandleChatScroll3(c utils2.Binw, before bool, root utils2.Root, ts int64,
 	limit uint16, snips bool) {
 
 	stmt := fmt.Sprintf(

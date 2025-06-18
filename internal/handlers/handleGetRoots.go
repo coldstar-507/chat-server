@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	// "time"
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -27,8 +25,8 @@ func readRoots(ctx context.Context, hexId string) ([]*flatgen.RootT, error) {
 		return nil, err
 	}
 
-	roots := utils.Map(res.Roots, func(r string) *flatgen.RootT {
-		return id_utils.ParseRoot(hex.NewDecoder(strings.NewReader(r)))
+	roots := utils2.Map(res.Roots, func(r string) *flatgen.RootT {
+		return utils2.ParseRoot(hex.NewDecoder(strings.NewReader(r)))
 	})
 
 	return roots, nil
@@ -64,7 +62,7 @@ func AddNewRoot(ctx context.Context, id, root string) error {
 
 func GetOrPushRootFromGroup(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, error) {
 	var pushedRoot bool
-	groupId := id_utils.HexNodeId(potNewRoot.Primary)
+	groupId := utils2.HexNodeId(potNewRoot.Primary)
 	err := db.Mongo.UseSession(context.Background(), func(sc mongo.SessionContext) error {
 		err := sc.StartTransaction()
 		if err != nil {
@@ -78,15 +76,15 @@ func GetOrPushRootFromGroup(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, er
 
 		// no need to check for homological, all roots of group are homological
 		if len(roots) == 0 {
-			err = AddNewRoot(sc, groupId, id_utils.HexRoot(potNewRoot))
+			err = AddNewRoot(sc, groupId, utils2.HexRoot(potNewRoot))
 			if err != nil {
 				return err
 			}
 			pushedRoot = true
 		} else {
-			mur := id_utils.MostUpToDateRoot(roots)
-			if id_utils.CouldUpdateRoot(mur) {
-				hexRoot := id_utils.HexRoot(potNewRoot)
+			mur := utils2.MostUpToDateRoot(roots)
+			if utils2.CouldUpdateRoot(mur) {
+				hexRoot := utils2.HexRoot(potNewRoot)
 				if err = AddNewRoot(sc, groupId, hexRoot); err != nil {
 					return err
 				}
@@ -103,9 +101,9 @@ func GetOrPushRootFromGroup(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, er
 
 func GetOrPushRootFromUsers(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, error) {
 	var pushedRoot bool
-	userId1 := id_utils.HexNodeId(potNewRoot.Primary)
-	userId2 := id_utils.HexNodeId(potNewRoot.Secondary)
-	fmt.Printf("GetOrPushRootFromUsers: pot_new_root=%s", id_utils.HexRoot(potNewRoot))
+	userId1 := utils2.HexNodeId(potNewRoot.Primary)
+	userId2 := utils2.HexNodeId(potNewRoot.Secondary)
+	fmt.Printf("GetOrPushRootFromUsers: pot_new_root=%s", utils2.HexRoot(potNewRoot))
 	fmt.Printf("GetOrPushRootFromUsers: userId1=%s, userId2=%s\n", userId1, userId2)
 	err := db.Mongo.UseSession(context.Background(), func(sc mongo.SessionContext) error {
 		err := sc.StartTransaction()
@@ -121,25 +119,25 @@ func GetOrPushRootFromUsers(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, er
 		}
 
 		// we want the homological ones
-		roots = utils.Filter(roots, func(r *flatgen.RootT) bool {
-			return id_utils.IsHomological(r, potNewRoot)
+		roots = utils2.Filter(roots, func(r *flatgen.RootT) bool {
+			return utils2.IsHomological(r, potNewRoot)
 		})
 
 		fmt.Println("GetOrPushRootFromUsers: homological roots:", roots)
 
 		if len(roots) == 0 {
 			fmt.Println("GetorPushRootFromUsers: empty roots, adding new")
-			hexRoot := id_utils.HexRoot(potNewRoot)
+			hexRoot := utils2.HexRoot(potNewRoot)
 			if err := AddRoots(sc, hexRoot, userId1, userId2); err != nil {
 				fmt.Println("GetOrPushRootFromUsers: error adding roots:", err)
 				return err
 			}
 			pushedRoot = true
 		} else {
-			mur := id_utils.MostUpToDateRoot(roots)
-			if id_utils.CouldUpdateRoot(mur) {
+			mur := utils2.MostUpToDateRoot(roots)
+			if utils2.CouldUpdateRoot(mur) {
 				fmt.Println("GetorPushRootFromUsers: could update root")
-				hexRoot := id_utils.HexRoot(potNewRoot)
+				hexRoot := utils2.HexRoot(potNewRoot)
 				if err = AddRoots(sc, hexRoot, userId1, userId2); err != nil {
 					fmt.Println("GetOrPushRootFromUsers: error adding roots:",
 						err)
@@ -160,7 +158,7 @@ func GetOrPushRootFromUsers(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, er
 
 func GetOrPushRoot(potNewRoot *flatgen.RootT) (*flatgen.RootT, bool, error) {
 	potNewRoot.Confirmed = true
-	isGroup := id_utils.EqualNodeId(potNewRoot.Secondary, id_utils.NodeIdZero)
+	isGroup := utils2.EqualNodeId(potNewRoot.Secondary, utils2.NodeIdZero)
 	if isGroup {
 		log.Println("GetOrPushRoot: isGroup")
 		return GetOrPushRootFromGroup(potNewRoot)

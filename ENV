@@ -2,8 +2,8 @@
 
 SERVER_FOLDER="$HOME/.chat-server"
 
-export DATA_PATH="$SERVER_FOLDER/data"
-export FIREBASE_CONFIG="$HOME/Documents/service_accounts/down4-26ee1-firebase-adminsdk-dgb0e-fb96ba7b43.json"
+DATA_PATH="$SERVER_FOLDER/data"
+FIREBASE_CONFIG="$HOME/Documents/service_accounts/down4-26ee1-firebase-adminsdk-dgb0e-fb96ba7b43.json"
 
 
 # those are objects that hold connections to chats
@@ -12,13 +12,13 @@ export FIREBASE_CONFIG="$HOME/Documents/service_accounts/down4-26ee1-firebase-ad
 # -- more managers means horizontal spread, less contentions for
 #    read and write locks that happens on connections, disconnections and broadcasts
 #    and should in theory make the system more concurrent
-export N_CHAT_MANAGERS=8
+N_CHAT_MANAGERS=8
 # limit the number of goroutines *per manager* that can be doing a database write
-export N_DB_SEMAPHORE=10000
+N_DB_SEMAPHORE=10000
 # limit the number of goroutines *per manager* that can be doing a net.Conn write
-export N_BC_SEMAPHORE=10000
+N_BC_SEMAPHORE=10000
 
-export N_BOOST_MAN=128
+N_BOOST_MAN=128
 
 mkdir -p $DATA_PATH
 

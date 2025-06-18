@@ -1,31 +1,20 @@
 package tools
 
 import (
-	// "bytes"
-	// "encoding/binary"
-	// "bytes"
-	// "encoding/binary"
-	// "encoding/hex"
 	"math/rand"
-
-	// "strconv"
-	// "unsafe"
 
 	"sync"
 
-	// "github.com/coldstar-507/flatgen"
-	// "github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 var (
 	FourKbPool = NewBytePool(4096)
 	OneKbPool  = NewBytePool(1024)
 	MediumPool = NewBytePool(256)
-	RootPool   = NewBytePool(id_utils.RAW_ROOT_ID_LEN)
-	PushIdPool = NewBytePool(id_utils.RAW_PUSH_ID_LEN)
-	MsgIdPool  = NewBytePool(id_utils.RAW_MSG_ID_LEN)
+	RootPool   = NewBytePool(utils2.RAW_ROOT_ID_LEN)
+	PushIdPool = NewBytePool(utils2.RAW_PUSH_ID_LEN)
+	MsgIdPool  = NewBytePool(utils2.RAW_MSG_ID_LEN)
 	SmallPool  = NewBytePool(128)
 	TinyPool   = NewBytePool(4)
 )
@@ -75,7 +64,7 @@ type timeId struct {
 func makeTimeId(kind byte, place uint16) *timeId {
 	return &timeId{
 		kind:      kind,
-		timestamp: utils.MakeTimestamp(),
+		timestamp: utils2.MakeTimestamp(),
 		unik:      rand.Uint32(),
 		place:     place,
 	}

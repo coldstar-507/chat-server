@@ -8,7 +8,7 @@ import (
 	"firebase.google.com/go/v4/auth"
 
 	db "github.com/coldstar-507/chat-server/internal/db"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 var (
@@ -26,7 +26,7 @@ type VerificationRequest struct {
 
 func InitFirebaseAuth() {
 	auth, err := db.FirebaseApp.Auth(context.Background())
-	utils.Fatal(err, "TokenManager.Run(): error initialzing auth client")
+	utils2.Fatal(err, "TokenManager.Run(): error initialzing auth client")
 	authClient = auth
 }
 

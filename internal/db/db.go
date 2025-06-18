@@ -7,13 +7,11 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	// "github.com/syndtr/goleveldb/leveldb"
-	// "github.com/syndtr/goleveldb/leveldb/storage"
 	"google.golang.org/api/option"
 
 	"github.com/gocql/gocql"
@@ -39,13 +37,13 @@ func InitFirebaseApp() {
 	servAcc := os.Getenv("FIREBASE_CONFIG")
 	opt := option.WithCredentialsFile(servAcc)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
-	utils.Fatal(err, "InitFirebaseMessager error creating firebase app")
+	utils2.Fatal(err, "InitFirebaseMessager error creating firebase app")
 	FirebaseApp = app
 }
 
 func InitFirebaseMessager() {
 	Messager, err = FirebaseApp.Messaging(context.Background())
-	utils.Fatal(err, "InitFirebaseMessager error creating firebase messager")
+	utils2.Fatal(err, "InitFirebaseMessager error creating firebase messager")
 }
 
 var Scy *gocql.Session
@@ -105,9 +103,9 @@ func InitScylla() {
 	var cluster = gocql.NewCluster("localhost:9042")
 	var err error
 	Scy, err = cluster.CreateSession()
-	utils.Must(err)
+	utils2.Must(err)
 	err = createBoostTable()
-	utils.Must(err)
+	utils2.Must(err)
 }
 
 func ShutdownScylla() {
@@ -122,7 +120,7 @@ func InitMongo() {
 		ApplyURI(uri)
 
 	Mongo, err = mongo.Connect(context.TODO(), opt)
-	utils.Must(err)
+	utils2.Must(err)
 	dbOne = Mongo.Database("one")
 	Nodes = dbOne.Collection("nodes")
 
@@ -141,12 +139,12 @@ func ShutdownMongo() {
 // 	}
 
 // 	store, err = storage.OpenFile(store_path, false)
-// 	utils.Fatal(err, "InitLevelDb error opening store")
+// 	utils2.Fatal(err, "InitLevelDb error opening store")
 // 	LV, err = leveldb.Open(store, nil)
-// 	utils.Fatal(err, "InitLevelDb error opening leveldb")
+// 	utils2.Fatal(err, "InitLevelDb error opening leveldb")
 // }
 
 // func ShutDownLevelDb() {
-// 	utils.NonFatal(LV.Close(), "ShutDownLevelDb error closing leveldb")
-// 	utils.NonFatal(store.Close(), "ShutDownLevelDb error closing store")
+// 	utils2.NonFatal(LV.Close(), "ShutDownLevelDb error closing leveldb")
+// 	utils2.NonFatal(store.Close(), "ShutDownLevelDb error closing store")
 // }

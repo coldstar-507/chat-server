@@ -10,8 +10,7 @@ import (
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/handlers"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/utils2"
 )
 
 func TestMain(m *testing.M) {
@@ -30,7 +29,7 @@ type Binwriter struct {
 }
 
 func (cc *Binwriter) WriteBin(vals ...any) error {
-	return utils.WriteBin(cc.buf, vals...)
+	return utils2.WriteBin(cc.buf, vals...)
 }
 
 func TestBoostScroll(t *testing.T) {
@@ -50,7 +49,7 @@ func TestBoostScroll(t *testing.T) {
 		p []byte
 	)
 	for {
-		if err := utils.ReadBin(bw.buf, &k, &l); err != nil {
+		if err := utils2.ReadBin(bw.buf, &k, &l); err != nil {
 			fmt.Println("Read error:", err, "breaking")
 			break
 		}
@@ -58,7 +57,7 @@ func TestBoostScroll(t *testing.T) {
 		if cap(p) < int(l) {
 			p = make([]byte, l)
 		}
-		utils.ReadBin(bw.buf, p[:l])
+		utils2.ReadBin(bw.buf, p[:l])
 		fmt.Printf("t=%d, l=%d\n", k, l)
 		fb := flatgen.GetRootAsBooster(p, 0)
 		fmt.Printf(`
@@ -75,7 +74,7 @@ ts       : %d
 		fmt.Print("\n")
 
 		msgId := fb.MsgId(nil)
-		root := id_utils.MakeRawRoot(msgId.Root(nil))
+		root := utils2.MakeRawRoot(msgId.Root(nil))
 		// 01050000000000000000000000000500000000000000000000000000FFFFFFFFFFFFFFFFFF
 		// 01050000000000000000000000000500000000000000000000000000FFFFFFFFFFFFFFFFFF
 

@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/binary"
-	// "encoding/binary"
 	"io"
 	"log"
 	"net"
@@ -13,14 +12,12 @@ import (
 
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/flatgen"
-	"github.com/coldstar-507/utils/id_utils"
-	"github.com/coldstar-507/utils/utils"
-	// "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/coldstar-507/utils2"
 )
 
 func StartDeviceServer() {
 	listener, err := net.Listen("tcp", ":11004")
-	utils.Panic(err, "startDeviceServer error on net.Listen")
+	utils2.Panic(err, "startDeviceServer error on net.Listen")
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
@@ -39,16 +36,16 @@ func StartDeviceServer() {
 var DevConnsManager = devConnManager{
 	add:    make(chan *iddevConn),
 	send:   make(chan *push),
-	conns:  make(map[id_utils.Iddev_]*iddevConn),
+	conns:  make(map[utils2.Iddev_]*iddevConn),
 	ticker: time.NewTicker(time.Second * 30),
 }
 
 func (cm *devConnManager) Run() {
 	var (
-		iddevArray = id_utils.Iddev_{}
+		iddevArray = utils2.Iddev_{}
 		iddevBuf   = bytes.NewBuffer(iddevArray[:0])
 		heartbeat  = byte(0x99)
-		toRemove   = make([]*id_utils.Iddev_, 0, 24)
+		toRemove   = make([]*utils2.Iddev_, 0, 24)
 		pr         *flatgen.PushRequest
 		sendReq    *push
 	)
@@ -103,17 +100,17 @@ func (cm *devConnManager) Run() {
 			stmt := `INSERT INTO db_one.pushes
                                  (node_id, dev, ts, nonce, type, payload)
                                  VALUES (?, ?, ?, ?, ?, ?)`
-			ts := utils.MakeTimestamp()
+			ts := utils2.MakeTimestamp()
 			q := db.Scy.Query(stmt, pr.RawNodeIdBytes(), pr.Dev(), ts,
-				utils.MakeNonce(), pr.Type(), pr.PayloadBytes())
+				utils2.MakeNonce(), pr.Type(), pr.PayloadBytes())
 
 			sendReq.ech <- q.Exec()
 			q.Release()
 			iddevBuf.Reset()
-			err := utils.WriteBin(iddevBuf,
-				id_utils.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
+			err := utils2.WriteBin(iddevBuf,
+				utils2.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
 			log.Printf("DCM: writing %x, %x, %x to iddevBuf\n",
-				id_utils.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
+				utils2.KIND_IDDEV, pr.RawNodeIdBytes(), pr.Dev())
 			log.Printf("result: %x, %v\n", iddevArray, err)
 			// iddev := iddevBuf.Bytes()
 			// iddevBuf.Reset()
@@ -145,10 +142,10 @@ type push struct {
 }
 
 type iddevConn struct {
-	iddev     *id_utils.Iddev_
+	iddev     *utils2.Iddev_
 	conn      net.Conn
 	sess, ref int64
-	node      *id_utils.NodeId
+	node      *utils2.NodeId
 	dev       uint32
 	m         sync.Mutex
 }
@@ -156,14 +153,14 @@ type iddevConn struct {
 func (c *iddevConn) WriteBin(bin ...any) error {
 	c.m.Lock()
 	defer c.m.Unlock()
-	return utils.WriteBin(c.conn, bin...)
+	return utils2.WriteBin(c.conn, bin...)
 }
 
 // these will be sse conns
 type devConnManager struct {
 	add   chan *iddevConn
 	send  chan *push
-	conns map[id_utils.Iddev_]*iddevConn
+	conns map[utils2.Iddev_]*iddevConn
 	// conns  map[string]*conn
 	ticker *time.Ticker
 }
@@ -172,7 +169,7 @@ type devConnManager struct {
 // unless a new push triggers an error -> disconnect
 // while this is iterating, could possibly panic the whole program
 // func readNew(ref []byte, w io.Writer) error {
-// 	prefix := id_utils.PushIdPrefix(ref)
+// 	prefix := utils2.PushIdPrefix(ref)
 // 	it := db.LV.NewIterator(util.BytesPrefix(prefix), nil)
 // 	defer it.Release()
 // 	for ok := it.Seek(ref); ok; ok = it.Next() {
@@ -196,7 +193,7 @@ func ReadPushes(w io.Writer, nodeId []byte, dev uint32, ts int64) error {
 		payload   []byte
 	)
 	for it.Scan(&timestamp, &t, &payload) {
-		err := utils.WriteBin(w, t, timestamp, uint16(len(payload)), payload)
+		err := utils2.WriteBin(w, t, timestamp, uint16(len(payload)), payload)
 		if err != nil {
 			return err
 		}
@@ -219,7 +216,7 @@ func GetMsg(root []byte, ts int64, nonce uint32) ([]byte, error) {
 
 func HandleGetMsg(w http.ResponseWriter, r *http.Request) {
 	var (
-		_root = id_utils.Root{}
+		_root = utils2.Root{}
 		root  = _root[:]
 		ts    int64
 		nonce uint32
@@ -227,7 +224,7 @@ func HandleGetMsg(w http.ResponseWriter, r *http.Request) {
 		err   error
 	)
 
-	if err = utils.ReadBin(r.Body, &pad, root, &ts, &nonce); err != nil {
+	if err = utils2.ReadBin(r.Body, &pad, root, &ts, &nonce); err != nil {
 		log.Println("HandleGetMsg: error reading request:", err)
 		w.WriteHeader(500)
 	} else if msg, err := GetMsg(root, ts, nonce); err != nil {
@@ -261,22 +258,22 @@ func HandlePush(w http.ResponseWriter, r *http.Request) {
 // possible fix: read new from the connection manager
 func HandleDevConn(conn net.Conn) {
 	var (
-		nodeId = id_utils.NodeId{}
+		nodeId = utils2.NodeId{}
 		dev    uint32
 		ts     int64
 		t      byte
-		iddev  = id_utils.Iddev_{}
+		iddev  = utils2.Iddev_{}
 	)
-	if err := utils.ReadBin(conn, &t, nodeId[:], &dev, &ts); err != nil {
+	if err := utils2.ReadBin(conn, &t, nodeId[:], &dev, &ts); err != nil {
 		log.Println("HandleDevConn: error reading ref:", err)
 		conn.Close()
 		return
 	}
 	iddev[0] = t
 	copy(iddev[1:], nodeId[:])
-	binary.BigEndian.PutUint32(iddev[1+id_utils.RAW_NODE_ID_LEN:], dev)
+	binary.BigEndian.PutUint32(iddev[1+utils2.RAW_NODE_ID_LEN:], dev)
 	// // copy(iddev[:], nodeId[:])
-	// // binary.BigEndian.PutUint32(iddev[id_utils.RAW_NODE_ID_LEN:], dev)
+	// // binary.BigEndian.PutUint32(iddev[utils2.RAW_NODE_ID_LEN:], dev)
 	// if err := ReadPushes(conn, nodeId[:], dev, ts); err != nil {
 	// 	log.Println("HandleDevConn error reading new, canceling connection:", err)
 	// 	conn.Close()
@@ -286,7 +283,7 @@ func HandleDevConn(conn net.Conn) {
 	DevConnsManager.add <- &iddevConn{
 		iddev: &iddev,
 		conn:  conn,
-		sess:  utils.MakeTimestamp(),
+		sess:  utils2.MakeTimestamp(),
 		ref:   ts,
 		dev:   dev,
 		node:  &nodeId,
@@ -303,7 +300,7 @@ func HandleDevConn(conn net.Conn) {
 
 // 	var dev iddev
 // 	pushId := flatgen.GetRootAsPushId(ref, 0)
-// 	utils.WritePushIdPrefixId(bytes.NewBuffer(dev[:0]), pushId)
+// 	utils2.WritePushIdPrefixId(bytes.NewBuffer(dev[:0]), pushId)
 
 // 	if err := readNew(ref, w); err != nil { // first read all new pushes
 // 		log.Println("HandleDevConn error reading new, canceling connection:", err)

@@ -7,9 +7,8 @@ import (
 	// myAuth "github.com/coldstar-507/chat-server/internal/auth"
 	"github.com/coldstar-507/chat-server/internal/db"
 	"github.com/coldstar-507/chat-server/internal/handlers"
-	"github.com/coldstar-507/router/router_utils"
-	"github.com/coldstar-507/utils/http_utils"
-	"github.com/coldstar-507/utils/utils"
+	"github.com/coldstar-507/router-server/router_utils"
+	"github.com/coldstar-507/utils2"
 )
 
 // this should be part of the ENV in production
@@ -78,10 +77,10 @@ func main() {
 	mux.HandleFunc("POST /get-message", handlers.HandleGetMsg)
 	mux.HandleFunc("POST /push", handlers.HandlePush)
 
-	server := http_utils.ApplyMiddlewares(mux, http_utils.StatusLogger)
+	server := utils2.ApplyMiddlewares(mux, utils2.StatusLogger)
 
 	addr := "0.0.0.0:8082"
 	log.Println("Starting http chat-server on", addr)
 	err := http.ListenAndServe(addr, server)
-	utils.NonFatal(err, "http.ListenAndServe error")
+	utils2.NonFatal(err, "http.ListenAndServe error")
 }
